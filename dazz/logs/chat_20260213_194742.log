@@ -1,0 +1,34 @@
+19:47 Connected as 
+RAW_RECV: {"ver":1,"op":1001,"body":{"Code":0,"Content":"","UserId":19890048,"NickName":"Kinaraaaa","Photo":"https://static.dazz2.com/upload/auth/photo/76b7f8d2d5b586724009c182e3596ff9.jpg","IsActor":0,"IsAdmin":0,"Gold":159,"UserNum":2,"UserIndex":0,"RoomNumber":"","IsPlay":0,"PullUrl":"","Hls_url":"","IsObs":0,"BanEnterTime":0,"Sex":1,"Signature":"hai! ini kinara 🥰😚","City_name":"","Level":8,"IsActorLeave":0,"IsRobot":0,"IsRobotNotShow":0,"Pretty_no":"","Is_super":0,"RoomName":"","Pretty_member_level":0,"Pretty_unions_level":0,"Pretty_broadcast_name":"","VipLevel":0,"VIPAnimation":0,"VipBgurl":"","HeadImageLevel":0,"HeadImageUrl":"","PrettyBgurl":"","PrettyImageUrl":"","EffectRankFlag":0,"AnchorRankFlag":0,"Level_next_gold":0,"GoldWater":-1,"IsActorBan":0,"Car_name":"","Car_animate":"","Car_icon":"","Car_audio":"","Car_floating":"","IsOfficial":0,"IsNShowEnterTip":0,"UserScore":0,"EnterTime":1770983262,"GiftVersion":"","Visitor":0,"IsFirstEnterRoom":0,"StreamKey":"","OfficialService":0,"MultipleLianmai":0,"PrettyNoExt":{"Icon":"","BottomIcon":"","EnterIcon":"","UpColor":"","DownColor":""},"RichLevel":0,"Tourist":0,"GameLevel":0,"IsSmallDialog":0,"MlmLayout":5,"AnniversaryIcon":[],"RichHideSwitch":0},"TimeStamp":1770983262614}
+
+RAW_RECV: {"ver":1,"op":1066,"body":{"UserId":14025808,"Score":0,"RankNum":9999},"TimeStamp":1770983262614}
+
+RAW_RECV: {"ver":1,"op":1067,"body":{"UserId":14025808,"LiveTime":0,"RankNum":0},"TimeStamp":1770983262615}
+
+RAW_RECV: {"ver":1,"op":1070,"body":{"Sharing":0,"BGUrl":""},"TimeStamp":1770983262615}
+
+RAW_RECV: {"ver":1,"op":2014,"body":{"Code":0,"Open":0,"CountSwitch":0},"TimeStamp":1770983262615}
+
+RAW_RECV: {"ver":1,"op":1096,"body":{"Notice":"","NoticeTitle":""},"TimeStamp":1770983262616}
+
+RAW_RECV: {"ver":1,"op":3610,"body":{"GlobalSwitch":0,"AnchorId":14025808,"AnchorSwitch":1,"IsInTime":1},"TimeStamp":1770983262616}
+
+RAW_RECV: {"ver":1,"op":1085,"body":{"UserId":14025808,"RankValue":0,"LastScore":50002.7},"TimeStamp":1770983262616}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":20888686,"UserName":"🍁Nikent","UserHeadImg":"/upload/auth/photo/6a110a321410efa5d5abe88a71b5dd68.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":1700,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983262842}
+
+RAW_RECV: {"ver":1,"op":1011,"body":{"UserId":20340102,"NickName":"STP Agency","GiftId":137,"Mutiple":300,"Gold":0,"Level":79,"Photo":"/upload/photo/ios_1767019728140244.jpg","HeadImg":"https://cdn.dazz2.com/upload/stamp/20240930/66fa6afc9f63a.png","IsAdmin":1,"WinTotalGold":120000,"Details":[{"Times":300,"Num":1}],"IsBoastcast":1,"SendNum":199,"InRoomId":93132,"SEth":"","SUC":"","WinEth":"","WinUc":"","GiftType":20,"IsTransmit":1,"Cid":15124626,"CNickname":"🅂🅃🄿 ROSE🌹","PropNum":0,"Open_secret":0,"IsSecret":0,"IsTyrantGift":0,"AnimationUrl":"","IsFirstWin":0,"GiftPrice":400,"GiftSection":1,"LuckSection":2,"IsLuckyPaodao":0,"IsLuckyPaodaoTime":0},"TimeStamp":1770983263589}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":11678268,"UserName":"0pp4 130TUN4","UserHeadImg":"/upload/auth/photo/d10bdf1eb76c895f7e12a20003a230de.jpg","GameName":"sweet bonanza","GameIcon":"https://cdn.dazz2.com/upload/tmp/20251118/691c31b60c979.png","PublicColorUp":"","PublicColorDown":"","Gold":4000,"Open_secret":0,"GameType":10064,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983263845}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":20750626,"UserName":"LOve","UserHeadImg":"/upload/photo/ios_1768986590659818.jpg","GameName":"Lucky piggy","GameIcon":"https://cdn.dazz2.com/upload/tmp/20250313/67d27e40751a2.png","PublicColorUp":"","PublicColorDown":"","Gold":5000,"Open_secret":0,"GameType":10045,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983263945}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":21033884,"UserName":"Raya","UserHeadImg":"https://lh3.googleusercontent.com/a/ACg8ocKHFsirgDuDfY5WghrCcBzOyF8shotvg7sl1srlUvwx4C9KGQ=s96-c","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":1200,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983264046}
+
+RAW_RECV: {"ver":1,"op":1011,"body":{"UserId":20340102,"NickName":"STP Agency","GiftId":137,"Mutiple":300,"Gold":0,"Level":79,"Photo":"/upload/photo/ios_1767019728140244.jpg","HeadImg":"https://cdn.dazz2.com/upload/stamp/20240930/66fa6afc9f63a.png","IsAdmin":1,"WinTotalGold":120000,"Details":[{"Times":300,"Num":1}],"IsBoastcast":1,"SendNum":199,"InRoomId":93132,"SEth":"","SUC":"","WinEth":"","WinUc":"","GiftType":20,"IsTransmit":1,"Cid":15124626,"CNickname":"🅂🅃🄿 ROSE🌹","PropNum":0,"Open_secret":0,"IsSecret":0,"IsTyrantGift":0,"AnimationUrl":"","IsFirstWin":0,"GiftPrice":400,"GiftSection":1,"LuckSection":2,"IsLuckyPaodao":0,"IsLuckyPaodaoTime":0},"TimeStamp":1770983264415}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":12386312,"UserName":"S K Y","UserHeadImg":"/upload/auth/photo/0f44dbed618cdf1d1a28beb3c2f6e8d6.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":1100,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983264839}
+
+RAW_RECV: {"ver":1,"op":1011,"body":{"UserId":20340102,"NickName":"STP Agency","GiftId":137,"Mutiple":500,"Gold":0,"Level":79,"Photo":"/upload/photo/ios_1767019728140244.jpg","HeadImg":"https://cdn.dazz2.com/upload/stamp/20240930/66fa6afc9f63a.png","IsAdmin":1,"WinTotalGold":200000,"Details":[{"Times":500,"Num":1}],"IsBoastcast":1,"SendNum":199,"InRoomId":93132,"SEth":"","SUC":"","WinEth":"","WinUc":"","GiftType":20,"IsTransmit":1,"Cid":15124626,"CNickname":"🅂🅃🄿 ROSE🌹","PropNum":0,"Open_secret":0,"IsSecret":0,"IsTyrantGift":0,"AnimationUrl":"","IsFirstWin":0,"GiftPrice":400,"GiftSection":1,"LuckSection":2,"IsLuckyPaodao":0,"IsLuckyPaodaoTime":0},"TimeStamp":1770983266344}
+
+19:47 Disconnected
