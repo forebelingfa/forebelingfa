@@ -1,0 +1,233 @@
+SEND login: {
+  "body": {
+    "DeviceType": 1,
+    "EnterType": 0,
+    "FuncLevel": 1280,
+    "IsSmallDialog": 0,
+    "IsVoice": 0,
+    "Lang": "id",
+    "Md5Str": "c2a15b94a16b8fca40f170a3d3d64083",
+    "RoomId": 123,
+    "TimeMill": 1791389470,
+    "Token": "04b9864fab5436e8",
+    "Tourist": 0,
+    "UserId": 10673652,
+    "Version": "2.1.5",
+    "Visitor": 0,
+    "package_type": "haigou-Android"
+  },
+  "op": 1001,
+  "ver": 1
+}
+RECV: {
+  "ver": 1,
+  "op": 1001,
+  "body": {
+    "Code": 0,
+    "Content": "",
+    "UserId": 10673652,
+    "NickName": "Jacques Masse",
+    "Photo": "https://lh3.googleusercontent.com/a/ACg8ocIpB01dLfFeaKXDVYlbaEIsjTRlhzOB1U1WFUJTD984YL9Ezw=s96-c",
+    "IsActor": 0,
+    "IsAdmin": 0,
+    "Gold": 0,
+    "UserNum": 1,
+    "UserIndex": 0,
+    "RoomNumber": "",
+    "IsPlay": 0,
+    "PullUrl": "http://hdl.ws.yu3.co/dazz/73bc30ce727cf6b1.flv",
+    "Hls_url": "http://hls.ws.yu3.co/dazz/73bc30ce727cf6b1.m3u8",
+    "IsObs": 0,
+    "BanEnterTime": 0,
+    "Sex": 1,
+    "Signature": "",
+    "City_name": "",
+    "Level": 1,
+    "IsActorLeave": 0,
+    "IsRobot": 0,
+    "IsRobotNotShow": 0,
+    "Pretty_no": "",
+    "Is_super": 0,
+    "RoomName": "",
+    "Pretty_member_level": 0,
+    "Pretty_unions_level": 0,
+    "Pretty_broadcast_name": "",
+    "VipLevel": 0,
+    "VIPAnimation": 0,
+    "VipBgurl": "",
+    "HeadImageLevel": 0,
+    "HeadImageUrl": "",
+    "PrettyBgurl": "",
+    "PrettyImageUrl": "",
+    "EffectRankFlag": 0,
+    "AnchorRankFlag": 0,
+    "Level_next_gold": 0,
+    "GoldWater": -1,
+    "IsActorBan": 0,
+    "Car_name": "",
+    "Car_animate": "",
+    "Car_icon": "",
+    "Car_audio": "",
+    "Car_floating": "",
+    "IsOfficial": 0,
+    "IsNShowEnterTip": 1,
+    "UserScore": 0,
+    "EnterTime": 1791389470,
+    "GiftVersion": "",
+    "Visitor": 0,
+    "IsFirstEnterRoom": 0,
+    "StreamKey": "73bc30ce727cf6b1",
+    "OfficialService": 0,
+    "MultipleLianmai": 0,
+    "PrettyNoExt": {
+      "Icon": "",
+      "BottomIcon": "",
+      "EnterIcon": "",
+      "UpColor": "",
+      "DownColor": ""
+    },
+    "RichLevel": 0,
+    "Tourist": 0,
+    "GameLevel": 0,
+    "IsSmallDialog": 0,
+    "MlmLayout": 5,
+    "AnniversaryIcon": [],
+    "RichHideSwitch": 0
+  },
+  "TimeStamp": 1791389470595
+}
+SEND claim: {
+  "body": {
+    "ID": 999
+  },
+  "op": 2101,
+  "ver": 1
+}
+RECV: {
+  "ver": 1,
+  "op": 1066,
+  "body": {
+    "UserId": 10000429,
+    "Score": 0,
+    "RankNum": 9999
+  },
+  "TimeStamp": 1791389470595
+}
+RECV: {
+  "ver": 1,
+  "op": 1067,
+  "body": {
+    "UserId": 10000429,
+    "LiveTime": 0,
+    "RankNum": 0
+  },
+  "TimeStamp": 1791389470595
+}
+RECV: {
+  "ver": 1,
+  "op": 1070,
+  "body": {
+    "Sharing": 0,
+    "BGUrl": ""
+  },
+  "TimeStamp": 1791389470595
+}
+RECV: {
+  "ver": 1,
+  "op": 2014,
+  "body": {
+    "Code": 0,
+    "Open": 0,
+    "CountSwitch": 0
+  },
+  "TimeStamp": 1791389470595
+}
+RECV: {
+  "ver": 1,
+  "op": 2101,
+  "body": {
+    "Code": 1012,
+    "ErrStr": "Luckybag habis masa berlakunya",
+    "ID": 999,
+    "Gold": 0,
+    "IsBlack": 0
+  },
+  "TimeStamp": 1791389470661
+}
+
+[SUMMARY]
+{
+  "ok": false,
+  "code": 1012,
+  "gold": 0,
+  "err": "Luckybag habis masa berlakunya",
+  "raw": {
+    "ver": 1,
+    "op": 2101,
+    "body": {
+      "Code": 1012,
+      "ErrStr": "Luckybag habis masa berlakunya",
+      "ID": 999,
+      "Gold": 0,
+      "IsBlack": 0
+    },
+    "TimeStamp": 1791389470661
+  }
+}
+
+[WORKER STATE]
+{
+  "accounts": 5,
+  "workers": {
+    "10673652": {
+      "connected": true,
+      "healthy": true,
+      "last_result": "failure",
+      "last_error": "Luckybag habis masa berlakunya",
+      "last_reason": "expired",
+      "success_count": 0,
+      "failure_count": 2
+    },
+    "10673660": {
+      "connected": false,
+      "healthy": true,
+      "last_result": "unknown",
+      "last_error": "",
+      "last_reason": "unknown",
+      "success_count": 0,
+      "failure_count": 0
+    },
+    "10673667": {
+      "connected": false,
+      "healthy": true,
+      "last_result": "unknown",
+      "last_error": "",
+      "last_reason": "unknown",
+      "success_count": 0,
+      "failure_count": 0
+    },
+    "10673675": {
+      "connected": false,
+      "healthy": true,
+      "last_result": "unknown",
+      "last_error": "",
+      "last_reason": "unknown",
+      "success_count": 0,
+      "failure_count": 0
+    },
+    "10673690": {
+      "connected": false,
+      "healthy": true,
+      "last_result": "unknown",
+      "last_error": "",
+      "last_reason": "unknown",
+      "success_count": 0,
+      "failure_count": 0
+    }
+  },
+  "packet_count": 8,
+  "failure_reasons": {
+    "expired": 1,
+    "unknown": 1
+  }
+}

@@ -112,6 +112,7 @@ def _check_account(account: Dict[str, Any], timeout: float, retries: int) -> Dic
     try:
         info = get_user_info(user_id, account["jwt"], timeout=timeout, retries=retries)
         data = info["data"]
+        # print(data)
         result["nickname"] = data.get("nickname", "N/A")
         result["gold"] = int(data["gold"])
     except (GoldCheckError, TypeError, ValueError) as exc:
