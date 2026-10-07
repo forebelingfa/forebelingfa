@@ -1,0 +1,36 @@
+[package]
+name = "dazz-ws-client"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "red_packet"
+path = "src/red_packet.rs"
+
+[[bin]]
+name = "debug_scan"
+path = "src/debug_scan.rs"
+
+[[bin]]
+name = "test_claim"
+path = "src/test_claim.rs"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
+futures-util = "0.3"
+md5 = "0.7"
+uuid = { version = "1", features = ["v4"] }
+url = "2.4"
+chrono = "0.4" 
+anyhow = "1.0"
+
+[profile.release]
+opt-level = 3
+
+[workspace]
+

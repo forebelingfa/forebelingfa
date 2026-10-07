@@ -1,0 +1,38 @@
+19:46 Connected as 
+RAW_RECV: {"ver":1,"op":1001,"body":{"Code":0,"Content":"","UserId":19890048,"NickName":"Kinaraaaa","Photo":"https://static.dazz2.com/upload/auth/photo/76b7f8d2d5b586724009c182e3596ff9.jpg","IsActor":0,"IsAdmin":0,"Gold":159,"UserNum":2,"UserIndex":0,"RoomNumber":"","IsPlay":0,"PullUrl":"","Hls_url":"","IsObs":0,"BanEnterTime":0,"Sex":1,"Signature":"hai! ini kinara 🥰😚","City_name":"","Level":8,"IsActorLeave":0,"IsRobot":0,"IsRobotNotShow":0,"Pretty_no":"","Is_super":0,"RoomName":"","Pretty_member_level":0,"Pretty_unions_level":0,"Pretty_broadcast_name":"","VipLevel":0,"VIPAnimation":0,"VipBgurl":"","HeadImageLevel":0,"HeadImageUrl":"","PrettyBgurl":"","PrettyImageUrl":"","EffectRankFlag":0,"AnchorRankFlag":0,"Level_next_gold":0,"GoldWater":-1,"IsActorBan":0,"Car_name":"","Car_animate":"","Car_icon":"","Car_audio":"","Car_floating":"","IsOfficial":0,"IsNShowEnterTip":0,"UserScore":0,"EnterTime":1770983192,"GiftVersion":"","Visitor":0,"IsFirstEnterRoom":0,"StreamKey":"","OfficialService":0,"MultipleLianmai":0,"PrettyNoExt":{"Icon":"","BottomIcon":"","EnterIcon":"","UpColor":"","DownColor":""},"RichLevel":0,"Tourist":0,"GameLevel":0,"IsSmallDialog":0,"MlmLayout":5,"AnniversaryIcon":[],"RichHideSwitch":0},"TimeStamp":1770983192821}
+
+RAW_RECV: {"ver":1,"op":1066,"body":{"UserId":14025808,"Score":0,"RankNum":9999},"TimeStamp":1770983192821}
+
+RAW_RECV: {"ver":1,"op":1067,"body":{"UserId":14025808,"LiveTime":0,"RankNum":0},"TimeStamp":1770983192821}
+
+RAW_RECV: {"ver":1,"op":1070,"body":{"Sharing":0,"BGUrl":""},"TimeStamp":1770983192821}
+
+RAW_RECV: {"ver":1,"op":2014,"body":{"Code":0,"Open":0,"CountSwitch":0},"TimeStamp":1770983192821}
+
+RAW_RECV: {"ver":1,"op":1096,"body":{"Notice":"","NoticeTitle":""},"TimeStamp":1770983192822}
+
+RAW_RECV: {"ver":1,"op":3610,"body":{"GlobalSwitch":0,"AnchorId":14025808,"AnchorSwitch":1,"IsInTime":1},"TimeStamp":1770983192822}
+
+RAW_RECV: {"ver":1,"op":1085,"body":{"UserId":14025808,"RankValue":0,"LastScore":50002.7},"TimeStamp":1770983192822}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":12532869,"UserName":"SaYangkuh..","UserHeadImg":"/upload/auth/photo/cbfdd0d20d6e47b350123acde3065fa9.jpg","GameName":"Gourmet Fortune","GameIcon":"https://cdn.dazz2.com/upload/tmp/20250711/6870a57eeb661.png","PublicColorUp":"","PublicColorDown":"","Gold":4000,"Open_secret":0,"GameType":10055,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983192850}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":17741074,"UserName":"OFF !!!","UserHeadImg":"/upload/photo/ios_1769376123578878.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":52000,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983193051}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":14096960,"UserName":"kamsiah","UserHeadImg":"/upload/auth/photo/265582dbc787c7a9845d70c933961fe0.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":2500,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983193845}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":11347794,"UserName":"gdlmf","UserHeadImg":"/upload/auth/photo/17e2477eaeb018be3b499f3a09a4eee8.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":1100,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983193945}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":19383791,"UserName":"👉KIMPET👈","UserHeadImg":"/upload/auth/photo/0a336c874c4449f6712801264386a7a5.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":32000,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983194045}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":16424364,"UserName":"KORBAN MU","UserHeadImg":"/upload/auth/photo/2f67f9ed1891955590f026898b1a5b96.jpg","GameName":"S777","GameIcon":"https://cdn.dazz2.com/upload/tmp/20250724/6881c7e253ce8.png","PublicColorUp":"","PublicColorDown":"","Gold":1500,"Open_secret":0,"GameType":10058,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983194146}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":12386312,"UserName":"S K Y","UserHeadImg":"/upload/auth/photo/0f44dbed618cdf1d1a28beb3c2f6e8d6.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":2600,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983194849}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":17741074,"UserName":"OFF !!!","UserHeadImg":"/upload/photo/ios_1769376123578878.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":2000,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983195850}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":20888686,"UserName":"🍁Nikent","UserHeadImg":"/upload/auth/photo/6a110a321410efa5d5abe88a71b5dd68.jpg","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":1400,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983195951}
+
+RAW_RECV: {"ver":1,"op":1064,"body":{"UserId":21033884,"UserName":"Raya","UserHeadImg":"https://lh3.googleusercontent.com/a/ACg8ocKHFsirgDuDfY5WghrCcBzOyF8shotvg7sl1srlUvwx4C9KGQ=s96-c","GameName":"YUMMY Pro","GameIcon":"https://cdn.dazz2.com/upload/tmp/20241031/67235405a2071.png","PublicColorUp":"","PublicColorDown":"","Gold":2000,"Open_secret":0,"GameType":10039,"GameLevel":1,"AnchorId":0,"GoldUnitName":"","FloatThisRoom":0,"FloatAllRoom":1,"PublisThisRoom":0},"TimeStamp":1770983196051}
+
+19:46 Disconnected

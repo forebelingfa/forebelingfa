@@ -1,0 +1,48 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 10808,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "divine-wood-1c04.kiddoskriper.workers.dev",
+            "port": 443,
+            "users": [
+              {
+                "id": "74d2b7d5-6af1-40db-8390-2c88db729e9f",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "divine-wood-1c04.kiddoskriper.workers.dev"
+        },
+        "wsSettings": {
+          "path": "/?ed=2048",
+          "headers": {
+            "Host": "divine-wood-1c04.kiddoskriper.workers.dev"
+          }
+        }
+      }
+    }
+  ]
+}

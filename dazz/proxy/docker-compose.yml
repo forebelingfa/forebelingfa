@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  vless-client-1:
+    build: .
+    container_name: vless-client-1
+    volumes:
+      - ./config-1.json:/etc/v2ray/config.json
+    ports:
+      - "10801:10808"
+    restart: unless-stopped
+
+  vless-client-2:
+    build: .
+    container_name: vless-client-2
+    volumes:
+      - ./config-2.json:/etc/v2ray/config.json
+    ports:
+      - "10802:10808"
+    restart: unless-stopped
+
+  vless-client-3:
+    build: .
+    container_name: vless-client-3
+    volumes:
+      - ./config-3.json:/etc/v2ray/config.json
+    ports:
+      - "10803:10808"
+    restart: unless-stopped
+
+  vless-client-4:
+    build: .
+    container_name: vless-client-4
+    volumes:
+      - ./config-4.json:/etc/v2ray/config.json
+    ports:
+      - "10804:10808"
+    restart: unless-stopped
+
+  vless-client-5:
+    build: .
+    container_name: vless-client-5
+    volumes:
+      - ./config-5.json:/etc/v2ray/config.json
+    ports:
+      - "10805:10808"
+    restart: unless-stopped
+
+  vless-client-6:
+    build: .
+    container_name: vless-client-6
+    volumes:
+      - ./config-6.json:/etc/v2ray/config.json
+    ports:
+      - "10806:10808"
+    restart: unless-stopped
+
+  vless-client-7:
+    build: .
+    container_name: vless-client-7
+    volumes:
+      - ./config-7.json:/etc/v2ray/config.json
+    ports:
+      - "10807:10808"
+    restart: unless-stopped
+
+  vless-client-8:
+    build: .
+    container_name: vless-client-8
+    volumes:
+      - ./config-8.json:/etc/v2ray/config.json
+    ports:
+      - "10808:10808"
+    restart: unless-stopped
+
+  vless-client-9:
+    build: .
+    container_name: vless-client-9
+    volumes:
+      - ./config-9.json:/etc/v2ray/config.json
+    ports:
+      - "10809:10808"
+    restart: unless-stopped
+
+  vless-client-10:
+    build: .
+    container_name: vless-client-10
+    volumes:
+      - ./config-10.json:/etc/v2ray/config.json
+    ports:
+      - "10810:10808"
+    restart: unless-stopped
+
+  vless-client-11:
+    build: .
+    container_name: vless-client-11
+    volumes:
+      - ./config-11.json:/etc/v2ray/config.json
+    ports:
+      - "10811:10808"
+    restart: unless-stopped
+
+  vless-client-12:
+    build: .
+    container_name: vless-client-12
+    volumes:
+      - ./config-12.json:/etc/v2ray/config.json
+    ports:
+      - "10812:10808"
+    restart: unless-stopped
+
+  vless-client-13:
+    build: .
+    container_name: vless-client-13
+    volumes:
+      - ./config-13.json:/etc/v2ray/config.json
+    ports:
+      - "10813:10808"
+    restart: unless-stopped
+
+  vless-client-14:
+    build: .
+    container_name: vless-client-14
+    volumes:
+      - ./config-14.json:/etc/v2ray/config.json
+    ports:
+      - "10814:10808"
+    restart: unless-stopped
+
+  vless-client-15:
+    build: .
+    container_name: vless-client-15
+    volumes:
+      - ./config-15.json:/etc/v2ray/config.json
+    ports:
+      - "10815:10808"
+    restart: unless-stopped
+
+  vless-client-16:
+    build: .
+    container_name: vless-client-16
+    volumes:
+      - ./config-16.json:/etc/v2ray/config.json
+    ports:
+      - "10816:10808"
+    restart: unless-stopped
+
+  vless-client-17:
+    build: .
+    container_name: vless-client-17
+    volumes:
+      - ./config-17.json:/etc/v2ray/config.json
+    ports:
+      - "10817:10808"
+    restart: unless-stopped
+
+  vless-client-18:
+    build: .
+    container_name: vless-client-18
+    volumes:
+      - ./config-18.json:/etc/v2ray/config.json
+    ports:
+      - "10818:10808"
+    restart: unless-stopped
+
+  vless-client-19:
+    build: .
+    container_name: vless-client-19
+    volumes:
+      - ./config-19.json:/etc/v2ray/config.json
+    ports:
+      - "10819:10808"
+    restart: unless-stopped
+
+  vless-client-20:
+    build: .
+    container_name: vless-client-20
+    volumes:
+      - ./config-20.json:/etc/v2ray/config.json
+    ports:
+      - "10820:10808"
+    restart: unless-stopped

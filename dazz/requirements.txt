@@ -1,0 +1,7 @@
+pip
+requests
+Faker==37.8.0
+aiohttp_socks==0.10.1
+python-socks==2.7.2
+websocket-client==1.9.0
+websockets==15.0.1
