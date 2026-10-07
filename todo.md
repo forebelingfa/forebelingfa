@@ -15,7 +15,8 @@
 ## Next
 
 - [ ] Smoke-test chat and sender websocket join/message handling in a live room
-- [ ] Smoke-test the Rust worker's websocket join and claim acknowledgments when a bag-marked Tamil room is available
+- [x] Verify Rust websocket room join: room 14139 returned op 1001, code 0, with no error
+- [ ] Verify claim acknowledgments when a bag-marked Tamil room is available
 - [ ] Add `op 2100` anchor-room switching; the Rust worker currently scans and joins rooms marked by the hot-anchor API
 - [ ] Add focused regression tests for account parsing, API signing, room resolution, and chat payloads
 - [ ] Port additional Dazz API operations only after their Tamil endpoints and payloads are confirmed; Dazz H5 task/sign and password-reset routes returned 404

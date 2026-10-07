@@ -63,6 +63,14 @@ Run the room scanner and dispatcher:
 cargo run --release --manifest-path tamil/Cargo.toml -- --accounts accounts.txt
 ```
 
+Verify that one account can join a specific room without sending claims or chat:
+
+```bash
+cargo run --manifest-path tamil/Cargo.toml -- --join 14139 --logging on
+```
+
+The diagnostic exits after the server responds to the room-login frame (or after its 12-second timeout).
+
 The worker reads `userId,ws_token,jwt` accounts, filters `red_packet_logo`, follows countdown announcements, and sends a bounded claim burst when a bag opens. Run `cargo run --manifest-path tamil/Cargo.toml -- --help` for worker, scan, and claim settings.
 
 ## Rust LuckyBag worker

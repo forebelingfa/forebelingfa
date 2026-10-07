@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Context, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use futures_util::{stream, SinkExt, StreamExt};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
 use serde_json::{json, Map, Value};
 use std::cmp::min;
 use std::collections::{BTreeMap, HashSet, VecDeque};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -21,12 +21,46 @@ const WS_URL: &str = "ws://47.84.51.23:9001";
 const API_SIGNING_SECRET: &str = "5d206b343f87f2ca3a0aa05c58b9a64d";
 const WS_SIGNING_SECRET: &str = "uwkeovuoqnpn@13vxck9tjghazhhbrmy";
 const APP_VERSION: &str = "2.1.5";
+const CYAN: &str = "\x1b[38;5;45m";
+const GOLD: &str = "\x1b[38;5;220m";
+const RESET: &str = "\x1b[0m";
+
+fn log(logging: bool, category: &str, message: impl AsRef<str>) {
+    if !logging {
+        return;
+    }
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    println!("[{timestamp}][{category}] {}", message.as_ref());
+}
+
+fn print_banner(logging: bool) {
+    if !logging {
+        return;
+    }
+    println!(
+        "{CYAN}  +----------------------------------------------------------+\n  |  T A M I L   //   R E D   P A C K E T                   |\n  |                                                          |\n  |    LIVE ROOM SCAN  ::  PRIORITY DISPATCH  ::  CLAIM      |\n  +----------------------------------------------------------+{RESET}"
+    );
+    println!("{GOLD}  Tamil LuckyBag Rust worker v{APP_VERSION}{RESET}\n");
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+enum LoggingMode {
+    #[default]
+    On,
+    Off,
+}
 
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Scan Tamil hot rooms and dispatch bounded LuckyBag workers")]
 struct Args {
     #[arg(long, default_value = "accounts.txt")]
     accounts: PathBuf,
+
+    #[arg(long, value_enum, default_value_t = LoggingMode::On)]
+    logging: LoggingMode,
 
     #[arg(
         long,
@@ -67,6 +101,13 @@ struct Args {
 
     #[arg(long, action = clap::ArgAction::SetTrue)]
     scan_only: bool,
+
+    #[arg(
+        long,
+        value_name = "ROOM_ID",
+        help = "Join one room, report the server response, and exit without claiming"
+    )]
+    join: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +130,32 @@ struct WorkerConfig {
     max_shift: Duration,
     claim_attempts: usize,
     claim_delay: Duration,
+    logging: bool,
+}
+
+struct ClaimBurstConfig {
+    bag_id: u64,
+    room_id: u64,
+    user_id: u64,
+    attempts: usize,
+    start_delay: Duration,
+    attempt_delay: Duration,
+    logging: bool,
+}
+
+fn resolve_account_path(requested: &Path) -> PathBuf {
+    if requested.is_absolute() || requested.is_file() {
+        return requested.to_path_buf();
+    }
+
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    let workspace_candidate = workspace_root.join(requested);
+    if workspace_candidate.is_file() {
+        return workspace_candidate;
+    }
+    requested.to_path_buf()
 }
 
 fn now_seconds() -> Result<u64> {
@@ -237,7 +304,16 @@ async fn fetch_hot_page(
     client: &reqwest::Client,
     account: &Account,
     page: u64,
+    logging: bool,
 ) -> Result<(Vec<BagRoom>, u64)> {
+    log(
+        logging,
+        "api",
+        format!(
+            "requesting hot-anchor page {page} as account {}",
+            account.user_id
+        ),
+    );
     let payload = build_hot_anchor_payload(account.user_id, page)?;
 
     let mut headers = HeaderMap::new();
@@ -260,10 +336,20 @@ async fn fetch_hot_page(
         .send()
         .await?;
     if !response.status().is_success() {
+        log(
+            logging,
+            "error",
+            format!("hot-anchor page {page} returned HTTP {}", response.status()),
+        );
         return Err(anyhow!("home/hot_anchor HTTP status {}", response.status()));
     }
     let body: Value = response.json().await?;
     if !is_success_code(&body) {
+        log(
+            logging,
+            "error",
+            format!("hot-anchor page {page} API response: {}", body),
+        );
         return Err(anyhow!(
             "home/hot_anchor API code {}: {}",
             body["code"],
@@ -275,7 +361,17 @@ async fn fetch_hot_page(
     }
 
     let data = &body["data"];
-    Ok((parse_bag_rooms(data), parse_last_page(data)))
+    let rooms = parse_bag_rooms(data);
+    let last_page = parse_last_page(data);
+    log(
+        logging,
+        "api",
+        format!(
+            "page {page} returned {} LuckyBag-marked room(s); API last_page={last_page}",
+            rooms.len()
+        ),
+    );
+    Ok((rooms, last_page))
 }
 
 async fn scan_lucky_bag_rooms(
@@ -283,25 +379,58 @@ async fn scan_lucky_bag_rooms(
     account: &Account,
     max_pages: u64,
     concurrency: usize,
+    logging: bool,
 ) -> Result<Vec<BagRoom>> {
-    let (mut rooms, last_page) = fetch_hot_page(client, account, 1).await?;
+    log(
+        logging,
+        "scan",
+        format!("starting room scan; max_pages={max_pages}, concurrency={concurrency}"),
+    );
+    let (mut rooms, last_page) = fetch_hot_page(client, account, 1, logging).await?;
     let final_page = min(last_page, max_pages.max(1));
+    if last_page > final_page {
+        log(
+            logging,
+            "warning",
+            format!("API has {last_page} pages; configured cap limits this scan to {final_page}"),
+        );
+    }
     if final_page <= 1 {
+        log(
+            logging,
+            "scan",
+            format!(
+                "scan complete: {} unique room(s) across 1 page",
+                rooms.len()
+            ),
+        );
         return Ok(rooms);
     }
 
     let mut pages = stream::iter(2..=final_page)
-        .map(|page| async move { fetch_hot_page(client, account, page).await })
+        .map(|page| async move { fetch_hot_page(client, account, page, logging).await })
         .buffer_unordered(concurrency.max(1));
     while let Some(page_result) = pages.next().await {
         match page_result {
             Ok((page_rooms, _)) => rooms.extend(page_rooms),
-            Err(error) => eprintln!("Room scan page failed: {error}"),
+            Err(error) => log(
+                logging,
+                "error",
+                format!("room scan page failed: {error:#}"),
+            ),
         }
     }
 
     let mut seen = HashSet::new();
     rooms.retain(|room| seen.insert(room.room_id));
+    log(
+        logging,
+        "scan",
+        format!(
+            "scan complete: {} unique LuckyBag-marked room(s) across pages 1-{final_page}",
+            rooms.len()
+        ),
+    );
     Ok(rooms)
 }
 
@@ -332,22 +461,6 @@ fn room_login_payload(account: &Account, room_id: u64) -> Result<Value> {
     }))
 }
 
-fn heartbeat_payload(account: &Account, counter: u64) -> Value {
-    json!({
-        "ver": 1,
-        "op": 1002,
-        "body": {
-            "ChatType": 0,
-            "Content": counter.to_string(),
-            "DUserID": 0,
-            "SUserId": account.user_id,
-            "SNickName": "",
-            "Gold": 0,
-            "ConsumeLevel": 91
-        }
-    })
-}
-
 fn claim_plan(body: &Value, op: u64) -> Option<(u64, Duration)> {
     let bag_id = value_u64(&body["ID"]).filter(|bag_id| *bag_id > 0)?;
     if value_u64(&body["Status"]) == Some(1) {
@@ -366,10 +479,7 @@ fn claim_plan(body: &Value, op: u64) -> Option<(u64, Duration)> {
 
 async fn claim_burst<S>(
     writer: Arc<Mutex<S>>,
-    bag_id: u64,
-    attempts: usize,
-    start_delay: Duration,
-    attempt_delay: Duration,
+    config: ClaimBurstConfig,
     cancelled: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
 ) -> Result<()>
@@ -377,9 +487,20 @@ where
     S: futures_util::Sink<Message> + Unpin + Send + 'static,
     S::Error: std::fmt::Display + Send + Sync + 'static,
 {
-    let payload = Message::Text(json!({"body":{"ID":bag_id},"op":2101,"ver":1}).to_string());
+    let payload = Message::Text(json!({"body":{"ID":config.bag_id},"op":2101,"ver":1}).to_string());
 
-    let start_at = tokio::time::Instant::now() + start_delay;
+    let start_at = tokio::time::Instant::now() + config.start_delay;
+    log(
+        config.logging,
+        "claim",
+        format!(
+            "user {}, room {}, bag {}: waiting {:.1}s before burst",
+            config.user_id,
+            config.room_id,
+            config.bag_id,
+            config.start_delay.as_secs_f64()
+        ),
+    );
     while tokio::time::Instant::now() < start_at
         && !cancelled.load(Ordering::Relaxed)
         && !shutdown.load(Ordering::Relaxed)
@@ -388,7 +509,7 @@ where
             .await;
     }
 
-    for attempt in 0..attempts {
+    for attempt in 0..config.attempts {
         if cancelled.load(Ordering::Relaxed) || shutdown.load(Ordering::Relaxed) {
             break;
         }
@@ -398,8 +519,20 @@ where
             .send(payload.clone())
             .await
             .map_err(|error| anyhow!("websocket claim send failed: {error}"))?;
-        if attempt + 1 < attempts && !attempt_delay.is_zero() {
-            tokio::time::sleep(attempt_delay).await;
+        log(
+            config.logging,
+            "claim",
+            format!(
+                "user {}, room {}, bag {}: attempt {}/{} sent",
+                config.user_id,
+                config.room_id,
+                config.bag_id,
+                attempt + 1,
+                config.attempts
+            ),
+        );
+        if attempt + 1 < config.attempts && !config.attempt_delay.is_zero() {
+            tokio::time::sleep(config.attempt_delay).await;
         }
     }
     Ok(())
@@ -410,10 +543,33 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
     let mut last_activity = started;
     let mut shift_end = started + config.max_shift;
     let mut reconnect_delay = Duration::from_secs(1);
+    let mut connect_attempt = 0_u64;
+    log(
+        config.logging,
+        "worker",
+        format!(
+            "user {} assigned room {} ({}, anchor {}), max-shift={}s idle-timeout={}s",
+            account.user_id,
+            room.room_id,
+            room.nickname,
+            room.anchor_id,
+            config.max_shift.as_secs(),
+            config.idle_timeout.as_secs()
+        ),
+    );
     while !stop.load(Ordering::Relaxed)
         && tokio::time::Instant::now() < shift_end
         && last_activity.elapsed() < config.idle_timeout
     {
+        connect_attempt += 1;
+        log(
+            config.logging,
+            "websocket",
+            format!(
+                "user {} connecting to room {} (attempt {connect_attempt})",
+                account.user_id, room.room_id
+            ),
+        );
         match connect_async(WS_URL).await {
             Ok((socket, _)) => {
                 let (writer, mut reader) = socket.split();
@@ -423,7 +579,14 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                 let join = match room_login_payload(&account, room.room_id) {
                     Ok(payload) => payload,
                     Err(error) => {
-                        eprintln!("[{}] Could not create room join: {error}", account.user_id);
+                        log(
+                            config.logging,
+                            "error",
+                            format!(
+                                "user {} could not create join payload: {error:#}",
+                                account.user_id
+                            ),
+                        );
                         return;
                     }
                 };
@@ -433,19 +596,29 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                     .send(Message::Text(join.to_string()))
                     .await
                 {
-                    eprintln!("[{}] Join send failed: {error}", account.user_id);
+                    log(
+                        config.logging,
+                        "error",
+                        format!(
+                            "user {} room {} join send failed: {error}",
+                            account.user_id, room.room_id
+                        ),
+                    );
                     tokio::time::sleep(reconnect_delay).await;
                     reconnect_delay = (reconnect_delay * 2).min(Duration::from_secs(15));
                     continue;
                 }
                 reconnect_delay = Duration::from_secs(1);
-                println!(
-                    "[{}] Joined room {} for {} ({})",
-                    account.user_id, room.room_id, room.nickname, room.anchor_id
+                log(
+                    config.logging,
+                    "websocket",
+                    format!(
+                        "user {} joined room {} for {} (anchor {})",
+                        account.user_id, room.room_id, room.nickname, room.anchor_id
+                    ),
                 );
 
                 let mut heartbeat = tokio::time::interval(Duration::from_secs(30));
-                let mut heartbeat_counter = 0_u64;
                 loop {
                     if stop.load(Ordering::Relaxed)
                         || last_activity.elapsed() >= config.idle_timeout
@@ -456,19 +629,22 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
 
                     tokio::select! {
                         _ = heartbeat.tick() => {
-                            heartbeat_counter += 1;
-                            let heartbeat = heartbeat_payload(&account, heartbeat_counter);
-                            if let Err(error) = writer.lock().await.send(Message::Text(heartbeat.to_string())).await {
-                                eprintln!("[{}] Heartbeat failed in room {}: {error}", account.user_id, room.room_id);
+                            if let Err(error) = writer.lock().await.send(Message::Ping(Vec::new())).await {
+                                log(config.logging, "error", format!("user {} websocket ping failed in room {}: {error}", account.user_id, room.room_id));
                                 break;
                             }
+                            log(config.logging, "websocket", format!("user {} websocket ping sent to room {}", account.user_id, room.room_id));
                         }
                         incoming = reader.next() => {
                             match incoming {
                                 Some(Ok(Message::Text(text))) => {
-                                    let Ok(message) = serde_json::from_str::<Value>(&text) else { continue; };
+                                    let Ok(message) = serde_json::from_str::<Value>(&text) else {
+                                        log(config.logging, "warning", format!("user {} received a non-JSON text frame", account.user_id));
+                                        continue;
+                                    };
                                     let op = value_u64(&message["op"]).unwrap_or(0);
                                     let body = &message["body"];
+                                    log(config.logging, "event", format!("user {} room {} received op={op}", account.user_id, room.room_id));
                                     if op == 2100 || op == 2101 {
                                         last_activity = tokio::time::Instant::now();
                                     }
@@ -478,12 +654,13 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                                             .unwrap_or(0);
                                         if countdown > 0 {
                                             shift_end = shift_end.max(tokio::time::Instant::now() + Duration::from_secs(countdown + 5));
+                                            log(config.logging, "bag", format!("room {} bag event extends shift by countdown={}s", room.room_id, countdown));
                                         }
                                     }
 
                                     if op == 2101 {
                                         let code = body["Code"].to_string();
-                                        println!("[{}] Claim result in room {}: code={} gold={}", account.user_id, room.room_id, code, body["Gold"]);
+                                        log(config.logging, "claim", format!("user {} room {} result code={} gold={}", account.user_id, room.room_id, code, body["Gold"]));
                                         let result_code = body["Code"].as_i64().or_else(|| body["Code"].as_str()?.parse::<i64>().ok());
                                         if matches!(result_code, Some(0 | 1014)) {
                                             if let Some(bag_id) = value_u64(&body["ID"]) {
@@ -501,6 +678,7 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                                         let should_start = match existing {
                                             Some((signal, Some(deadline))) if is_open && tokio::time::Instant::now() < deadline => {
                                                 signal.store(true, Ordering::Relaxed);
+                                                log(config.logging, "claim", format!("bag {bag_id} opened before countdown; cancelling scheduled burst and firing now"));
                                                 true
                                             }
                                             Some((signal, deadline)) => {
@@ -512,9 +690,9 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
 
                                         if should_start {
                                             if is_open {
-                                                println!("[{}] Claimable bag {} in room {}; sending {} attempts", account.user_id, bag_id, room.room_id, config.claim_attempts);
+                                                log(config.logging, "bag", format!("user {} room {} bag {bag_id} opened; sending {} attempts", account.user_id, room.room_id, config.claim_attempts));
                                             } else {
-                                                println!("[{}] Bag {} countdown in room {}; scheduling bounded claim burst", account.user_id, bag_id, room.room_id);
+                                                log(config.logging, "bag", format!("user {} room {} bag {bag_id} countdown={}s", account.user_id, room.room_id, wait_time.as_secs()));
                                             }
                                             let cancel_signal = Arc::new(AtomicBool::new(false));
                                             let deadline = if is_open {
@@ -528,9 +706,20 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                                             let attempts = config.claim_attempts;
                                             let attempt_delay = config.claim_delay;
                                             let user_id = account.user_id;
+                                            let room_id = room.room_id;
+                                            let logging = config.logging;
+                                            let burst_config = ClaimBurstConfig {
+                                                bag_id,
+                                                room_id,
+                                                user_id,
+                                                attempts,
+                                                start_delay: wait_time,
+                                                attempt_delay,
+                                                logging,
+                                            };
                                             tokio::spawn(async move {
-                                                if let Err(error) = claim_burst(writer, bag_id, attempts, wait_time, attempt_delay, cancel_signal, stop_flag).await {
-                                                    eprintln!("[{user_id}] Claim send failed: {error}");
+                                                if let Err(error) = claim_burst(writer, burst_config, cancel_signal, stop_flag).await {
+                                                    log(logging, "error", format!("user {user_id} room {room_id} bag {bag_id} claim failed: {error:#}"));
                                                 }
                                             });
                                         }
@@ -538,14 +727,14 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                                 }
                                 Some(Ok(Message::Ping(payload))) => {
                                     if let Err(error) = writer.lock().await.send(Message::Pong(payload)).await {
-                                        eprintln!("[{}] Pong failed: {error}", account.user_id);
+                                        log(config.logging, "error", format!("user {} pong failed: {error}", account.user_id));
                                         break;
                                     }
                                 }
                                 Some(Ok(Message::Close(_))) | None => break,
                                 Some(Ok(_)) => {},
                                 Some(Err(error)) => {
-                                    eprintln!("[{}] WebSocket receive failed: {error}", account.user_id);
+                                    log(config.logging, "error", format!("user {} room {} websocket receive failed: {error}", account.user_id, room.room_id));
                                     break;
                                 }
                             }
@@ -557,9 +746,13 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                 }
             }
             Err(error) => {
-                eprintln!(
-                    "[{}] Connect to room {} failed: {error}",
-                    account.user_id, room.room_id
+                log(
+                    config.logging,
+                    "error",
+                    format!(
+                        "user {} connection to room {} failed: {error}",
+                        account.user_id, room.room_id
+                    ),
                 );
             }
         }
@@ -568,14 +761,45 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
             || tokio::time::Instant::now() >= shift_end
             || last_activity.elapsed() >= config.idle_timeout
         {
+            let reason = if stop.load(Ordering::Relaxed) {
+                "shutdown requested"
+            } else if tokio::time::Instant::now() >= shift_end {
+                "maximum shift elapsed"
+            } else {
+                "idle timeout elapsed"
+            };
+            log(
+                config.logging,
+                "worker",
+                format!(
+                    "user {} leaving room {}: {reason}",
+                    account.user_id, room.room_id
+                ),
+            );
             break;
         }
+        log(
+            config.logging,
+            "websocket",
+            format!(
+                "user {} reconnecting to room {} after {}s",
+                account.user_id,
+                room.room_id,
+                reconnect_delay.as_secs()
+            ),
+        );
         tokio::time::sleep(reconnect_delay).await;
         reconnect_delay = (reconnect_delay * 2).min(Duration::from_secs(15));
     }
-    println!(
-        "[{}] Worker shift ended for room {}",
-        account.user_id, room.room_id
+    log(
+        config.logging,
+        "worker",
+        format!(
+            "user {} worker ended for room {} after {}s",
+            account.user_id,
+            room.room_id,
+            started.elapsed().as_secs()
+        ),
     );
 }
 
@@ -588,6 +812,7 @@ async fn run_room_group(
     workers_per_room: usize,
     stop: Arc<AtomicBool>,
 ) {
+    let logging = config.logging;
     let group = {
         let mut queue = accounts.lock().await;
         let take = min(workers_per_room, queue.len());
@@ -597,14 +822,23 @@ async fn run_room_group(
     };
 
     if group.is_empty() {
+        log(
+            logging,
+            "dispatch",
+            format!("room {} skipped: no accounts available", room.room_id),
+        );
         active_rooms.lock().await.remove(&room.room_id);
         return;
     }
 
-    println!(
-        "Dispatching {} account(s) to room {}",
-        group.len(),
-        room.room_id
+    log(
+        logging,
+        "dispatch",
+        format!(
+            "dispatching {} account(s) to room {}",
+            group.len(),
+            room.room_id
+        ),
     );
     let mut workers = JoinSet::new();
     for account in group {
@@ -626,24 +860,138 @@ async fn run_room_group(
 
     while let Some(result) = workers.join_next().await {
         if let Err(error) = result {
-            eprintln!("Room worker task failed: {error}");
+            log(
+                logging,
+                "error",
+                format!("worker task for room {} failed: {error}", room.room_id),
+            );
         }
     }
     active_rooms.lock().await.remove(&room.room_id);
-    println!("Room {} released for a later scan", room.room_id);
+    log(
+        logging,
+        "dispatch",
+        format!("room {} released for a later scan", room.room_id),
+    );
 }
 
-async fn scan_only(client: &reqwest::Client, account: &Account, args: &Args) -> Result<()> {
-    let rooms =
-        scan_lucky_bag_rooms(client, account, args.max_pages, args.scan_concurrency).await?;
-    println!("Found {} LuckyBag-marked room(s):", rooms.len());
+async fn scan_only(
+    client: &reqwest::Client,
+    account: &Account,
+    args: &Args,
+    logging: bool,
+) -> Result<()> {
+    let rooms = scan_lucky_bag_rooms(
+        client,
+        account,
+        args.max_pages,
+        args.scan_concurrency,
+        logging,
+    )
+    .await?;
+    log(
+        logging,
+        "scan",
+        format!("found {} LuckyBag-marked room(s)", rooms.len()),
+    );
     for room in rooms {
-        println!(
-            "room_id={} anchor_id={} nickname={}",
-            room.room_id, room.anchor_id, room.nickname
+        log(
+            logging,
+            "room",
+            format!(
+                "room_id={} anchor_id={} nickname={}",
+                room.room_id, room.anchor_id, room.nickname
+            ),
         );
     }
     Ok(())
+}
+
+async fn debug_join_room(room_id: u64, account: &Account, logging: bool) -> Result<()> {
+    log(
+        logging,
+        "join-debug",
+        format!(
+            "connecting user {} to room {room_id}; claims and chat are disabled",
+            account.user_id
+        ),
+    );
+    let connect_result = tokio::time::timeout(Duration::from_secs(10), connect_async(WS_URL))
+        .await
+        .map_err(|_| anyhow!("websocket connection timed out after 10 seconds"))??;
+    let (socket, _) = connect_result;
+    let (mut writer, mut reader) = socket.split();
+    let payload = room_login_payload(account, room_id)?;
+    writer
+        .send(Message::Text(payload.to_string()))
+        .await
+        .context("failed to send room-login frame")?;
+    log(
+        logging,
+        "join-debug",
+        "room-login frame sent; waiting up to 12s for server response",
+    );
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(12);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            log(
+                logging,
+                "join-debug",
+                format!("no room-login response received for room {room_id} within 12s"),
+            );
+            return Err(anyhow!("no room-login response received within 12 seconds"));
+        }
+
+        let incoming = tokio::time::timeout(remaining, reader.next())
+            .await
+            .map_err(|_| anyhow!("no room-login response received within 12 seconds"))?;
+        match incoming {
+            Some(Ok(Message::Text(text))) => {
+                let message: Value = serde_json::from_str(&text)
+                    .context("server sent a non-JSON text frame during join test")?;
+                let op = value_u64(&message["op"]).unwrap_or(0);
+                let body = &message["body"];
+                let code = body["Code"].to_string();
+                let error = body["ErrStr"].as_str().unwrap_or("");
+                log(
+                    logging,
+                    "join-debug",
+                    format!("server frame op={op} code={code} error={error:?}"),
+                );
+
+                if op == 1001 {
+                    let rejected = body.get("Code").is_some()
+                        && !matches!(body["Code"].as_i64(), Some(0 | 200))
+                        && !matches!(body["Code"].as_str(), Some("0" | "200"));
+                    if rejected || !error.is_empty() {
+                        return Err(anyhow!(
+                            "server returned a room-login rejection: code={code}, error={error}"
+                        ));
+                    }
+                    log(
+                        logging,
+                        "join-debug",
+                        format!("server replied with op 1001 for room {room_id}; join accepted"),
+                    );
+                    let _ = writer.send(Message::Close(None)).await;
+                    return Ok(());
+                }
+            }
+            Some(Ok(Message::Ping(payload))) => {
+                writer.send(Message::Pong(payload)).await?;
+            }
+            Some(Ok(Message::Close(frame))) => {
+                return Err(anyhow!(
+                    "server closed the socket before join ACK: {frame:?}"
+                ));
+            }
+            Some(Ok(_)) => {}
+            Some(Err(error)) => return Err(anyhow!("websocket receive failed: {error}")),
+            None => return Err(anyhow!("websocket ended before join ACK")),
+        }
+    }
 }
 
 #[tokio::main]
@@ -659,11 +1007,33 @@ async fn main() -> Result<()> {
         return Err(anyhow!("claim-attempts must be positive"));
     }
 
-    let loaded = load_accounts(&args.accounts).await?;
+    let logging = args.logging == LoggingMode::On;
+    print_banner(logging);
+    log(
+        logging,
+        "startup",
+        format!(
+            "mode={}, account argument={}, scan-only={}, join={:?}",
+            if logging { "logging on" } else { "logging off" },
+            args.accounts.display(),
+            args.scan_only,
+            args.join
+        ),
+    );
+
+    let account_path = resolve_account_path(&args.accounts);
+    log(
+        logging,
+        "startup",
+        format!("loading accounts from {}", account_path.display()),
+    );
+    let loaded = load_accounts(&account_path)
+        .await
+        .with_context(|| format!("failed to load accounts from {}", account_path.display()))?;
     if loaded.is_empty() {
         return Err(anyhow!(
             "no valid accounts found in {}",
-            args.accounts.display()
+            account_path.display()
         ));
     }
     if args.scan_account_index >= loaded.len() {
@@ -671,13 +1041,30 @@ async fn main() -> Result<()> {
             "scan-account-index is outside the loaded account list"
         ));
     }
+    log(
+        logging,
+        "startup",
+        format!("loaded {} account(s)", loaded.len()),
+    );
     let scan_account = loaded[args.scan_account_index].clone();
+    log(
+        logging,
+        "startup",
+        format!(
+            "scanner uses account {} at index {}",
+            scan_account.user_id, args.scan_account_index
+        ),
+    );
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
 
+    if let Some(room_id) = args.join {
+        return debug_join_room(room_id, &scan_account, logging).await;
+    }
+
     if args.scan_only {
-        return scan_only(&client, &scan_account, &args).await;
+        return scan_only(&client, &scan_account, &args, logging).await;
     }
 
     let accounts = Arc::new(Mutex::new(VecDeque::from(loaded)));
@@ -685,10 +1072,15 @@ async fn main() -> Result<()> {
     let worker_semaphore = Arc::new(Semaphore::new(args.max_workers));
     let stop = Arc::new(AtomicBool::new(false));
     let stop_signal = stop.clone();
+    let shutdown_logging = logging;
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {
             stop_signal.store(true, Ordering::Relaxed);
-            eprintln!("Shutdown requested; waiting for active workers to finish.");
+            log(
+                shutdown_logging,
+                "shutdown",
+                "shutdown requested; waiting for active workers to finish",
+            );
         }
     });
 
@@ -697,12 +1089,29 @@ async fn main() -> Result<()> {
         max_shift: Duration::from_secs(args.max_shift_secs),
         claim_attempts: args.claim_attempts,
         claim_delay: Duration::from_millis(args.claim_delay_ms),
+        logging,
     };
     let room_capacity = (args.max_workers / args.workers_per_room).max(1);
     let mut room_tasks = JoinSet::new();
     let mut last_dispatched = BTreeMap::<u64, tokio::time::Instant>::new();
 
+    log(
+        logging,
+        "startup",
+        format!(
+            "dispatcher ready: max_workers={}, workers_per_room={}, scan_interval={}ms, max_pages={}, room_cooldown={}s",
+            args.max_workers,
+            args.workers_per_room,
+            args.scan_interval_ms,
+            args.max_pages,
+            args.room_cooldown_secs
+        ),
+    );
+
+    let mut scan_round = 0_u64;
     while !stop.load(Ordering::Relaxed) {
+        scan_round += 1;
+        log(logging, "scan", format!("starting scan round {scan_round}"));
         while room_tasks.try_join_next().is_some() {}
 
         match scan_lucky_bag_rooms(
@@ -710,6 +1119,7 @@ async fn main() -> Result<()> {
             &scan_account,
             args.max_pages,
             args.scan_concurrency,
+            logging,
         )
         .await
         {
@@ -735,6 +1145,11 @@ async fn main() -> Result<()> {
                         continue;
                     }
                     last_dispatched.insert(room.room_id, tokio::time::Instant::now());
+                    log(
+                        logging,
+                        "dispatch",
+                        format!("scheduling room {} ({})", room.room_id, room.nickname),
+                    );
                     room_tasks.spawn(run_room_group(
                         room,
                         accounts.clone(),
@@ -746,7 +1161,11 @@ async fn main() -> Result<()> {
                     ));
                 }
             }
-            Err(error) => eprintln!("Tamil room scan failed: {error:#}"),
+            Err(error) => log(
+                logging,
+                "error",
+                format!("Tamil room scan failed: {error:#}"),
+            ),
         }
 
         tokio::time::sleep(Duration::from_millis(args.scan_interval_ms)).await;
@@ -754,7 +1173,11 @@ async fn main() -> Result<()> {
 
     while let Some(result) = room_tasks.join_next().await {
         if let Err(error) = result {
-            eprintln!("Room scheduler task failed: {error}");
+            log(
+                logging,
+                "error",
+                format!("room scheduler task failed: {error}"),
+            );
         }
     }
     Ok(())
@@ -850,19 +1273,6 @@ mod tests {
         assert_eq!(payload["body"]["RoomId"], 456);
         assert_eq!(payload["body"]["Md5Str"], expected);
         assert!(time_mill > 1_000_000_000_000);
-    }
-
-    #[test]
-    fn heartbeat_uses_tamil_room_message_shape() {
-        let account = Account {
-            user_id: 123,
-            ws_token: "sample-token".to_string(),
-            jwt: "sample-jwt".to_string(),
-        };
-        let heartbeat = heartbeat_payload(&account, 4);
-        assert_eq!(heartbeat["op"], 1002);
-        assert_eq!(heartbeat["body"]["SUserId"], 123);
-        assert_eq!(heartbeat["body"]["Content"], "4");
     }
 
     #[test]
