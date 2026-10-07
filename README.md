@@ -52,6 +52,14 @@ python send_messages.py --live-user-id 10597440 --accounts accounts.txt --accoun
 
 Add `--bag-id ID` to attempt a specific LuckyBag after joining, or `--max-runtime SECONDS` to change the connection limit.
 
+## Interactive room chat
+
+```bash
+python chat.py --live-user-id 10597440 --accounts accounts.txt --account-index 0
+```
+
+Enter a message to send it to the room. Use `/to USER_ID MESSAGE` for a direct message, `/like` to send one like, `/help` for commands, or `/quit` to disconnect. Add `--max-runtime SECONDS` to set an optional session limit.
+
 ## Notes
 
 The claim path is intentionally minimal and optimized for one objective: claim the bag as soon as the room login is confirmed.
