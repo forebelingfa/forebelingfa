@@ -20,6 +20,11 @@ API_SIGNING_SECRET = "5d206b343f87f2ca3a0aa05c58b9a64d"
 TRANSIENT_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 DEFAULT_TIMEOUT = 10.0
 
+# Member profile modification endpoints
+MODIFY_INFO_URL = "member/modify_info"
+INTR_URL = "member/intr"
+PICTURE_RESOURCE_URL = "member/picture_resource"
+
 session = requests.Session()
 
 
@@ -243,3 +248,152 @@ def fetch_lucky_bag_rooms(
         if page_delay:
             time.sleep(page_delay)
     return matches
+
+
+def update_nickname(user_id: int, jwt_token: str, new_nickname: str) -> Dict[str, Any]:
+    """
+    Update the user's nickname via member/modify_info.
+
+    Args:
+        user_id: The user ID to update.
+        jwt_token: JWT authorization token.
+        new_nickname: The new nickname to set.
+    
+    Returns:
+        JSON response as dict.
+    """
+    if not new_nickname or not isinstance(new_nickname, str):
+        raise ValueError("new_nickname must be a non-empty string")
+
+    payload = {
+        "lang": "id",
+        "nickname": new_nickname,
+        "package_type": "taalmil-Android",
+        "sign": "",
+        "time": str(int(time.time())),
+        "user_id": str(user_id),
+    }
+    payload["sign"] = generate_sign_from_payload(payload)
+
+    result = _post(MODIFY_INFO_URL, payload, jwt_token=jwt_token)
+    return _require_success(result, MODIFY_INFO_URL)
+
+
+def update_intr(user_id: int, jwt_token: str, intr: str) -> Dict[str, Any]:
+    """
+    Update the user's intro/bio via member/intr.
+
+    Args:
+        user_id: The user ID to update.
+        jwt_token: JWT authorization token.
+        intr: The intro/bio text to set.
+    
+    Returns:
+        JSON response as dict.
+    """
+    payload = {
+        "lang": "id",
+        "intr": intr,
+        "sign": "",
+        "time": str(int(time.time())),
+        "user_id": str(user_id),
+    }
+    payload["sign"] = generate_sign_from_payload(payload)
+
+    result = _post(INTR_URL, payload, jwt_token=jwt_token)
+    return _require_success(result, INTR_URL)
+
+
+def change_profile_picture(
+    user_id: int,
+    jwt_token: str,
+    image_path: str,
+    app_version: str = APP_VERSION,
+    device_id: str = "4610ea917bca043b097f8b4d905a7ee4",
+) -> Dict[str, Any]:
+    """
+    Update the user's profile picture via member/picture_resource.
+
+    Args:
+        user_id: The user ID to update.
+        jwt_token: JWT authorization token.
+        image_path: Path or URL to the image resource.
+        app_version: App version string (default: 2.1.5).
+        device_id: Device identifier (default: a fixed example).
+    
+    Returns:
+        JSON response as dict.
+    """
+    payload = {
+        "app_version": app_version,
+        "channel_id": "3",
+        "device_id": device_id,
+        "facility": "1",
+        "lang": "id",
+        "package_type": "Android-Google",
+        "path": image_path,
+        "sign": "",
+        "time": str(int(time.time())),
+        "type": 1,
+        "user_id": str(user_id),
+    }
+    payload["sign"] = generate_sign_from_payload(payload)
+
+    result = _post(PICTURE_RESOURCE_URL, payload, jwt_token=jwt_token)
+    return _require_success(result, PICTURE_RESOURCE_URL)
+
+
+def clone_user_profile(
+    source_user_id: int, target_user_id: int, target_jwt_token: str
+) -> Dict[str, Optional[str]]:
+    """
+    Clone public profile fields (nickname, intro, picture) from any user onto your account.
+
+    Args:
+        source_user_id: The user ID to copy from.
+        target_user_id: Your account's user ID to apply info to.
+        target_jwt_token: Your JWT (target account).
+
+    Returns:
+        Dict with status for each field. Returns {"nickname": status, "intr": status, "picture": status}.
+    """
+    result = {"nickname": None, "intr": None, "picture": None}
+
+    # 1. Fetch source public profile (with target JWT)
+    try:
+        source_info = get_user_info(source_user_id, target_jwt_token)
+        data = source_info.get("data", {})
+    except TamilAPIError as exc:
+        result["nickname"] = f"failed: {exc}"
+        result["intr"] = f"failed: {exc}"
+        result["picture"] = f"failed: {exc}"
+        return result
+
+    # 2. Update nickname
+    nickname = data.get("nickname")
+    if nickname:
+        try:
+            update_nickname(target_user_id, target_jwt_token, str(nickname))
+            result["nickname"] = "ok"
+        except Exception as e:
+            result["nickname"] = f"failed: {e}"
+
+    # 3. Update intro
+    intr = data.get("intr")
+    if intr:
+        try:
+            update_intr(target_user_id, target_jwt_token, intr)
+            result["intr"] = "ok"
+        except Exception as e:
+            result["intr"] = f"failed: {e}"
+
+    # 4. Update profile picture
+    picture_path = data.get("head_img")
+    if picture_path:
+        try:
+            change_profile_picture(target_user_id, target_jwt_token, picture_path)
+            result["picture"] = "ok"
+        except Exception as e:
+            result["picture"] = f"failed: {e}"
+
+    return result
