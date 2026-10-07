@@ -1,83 +1,179 @@
-# Hi there, I'm Alexandra Owens 👋
+# Forebelingfa
 
-Welcome to my GitHub profile! I'm a **Print Production Planner** with a passion for orchestrating the seamless execution of print projects at **Douglas LLC**. My role involves everything from scheduling to quality control, ensuring that every project is delivered on time and meets the highest standards. Beyond my professional work, I have a deep interest in technology, which I explore through optimizing workflows and leveraging web tools to enhance productivity.
+This repo is built around a single objective: win the first-claim race for a LuckyBag by using the fastest valid worker path.
 
----
+The current active workflow is intentionally simple:
 
-## 🚀 What I Do
-
-In my current role at **Douglas LLC**, I manage the end-to-end planning and coordination of print production projects, ensuring efficiency at every stage. My skills and interests extend beyond print production into the world of technology:
-
-- 🖨️ **Print Production Planning**: I specialize in orchestrating complex print production schedules, working closely with design teams, vendors, and clients to guarantee timely results.
-- 📊 **Workflow Optimization**: I constantly seek ways to improve operational processes, exploring new technologies and methodologies to streamline production timelines and reduce costs.
-- 🌐 **Technology Enthusiast**: While my professional focus is on planning, I also have a deep curiosity for technology, particularly in how digital tools can improve traditional industries like print production.
-- 🛠️ **Web Exploration**: I enjoy exploring web technologies and platforms in my free time, whether it's for personal projects or to stay up-to-date with the latest trends. Here are a few websites that I frequently explore:
-  - [Johnson](http://johnson.com/): Focused on innovative solutions in print and marketing.
-  - [Walters](https://walters.com/): Exploring advancements in logistics and supply chain management.
-  - [Duran](http://www.duran.com/): A hub for creative print design inspirations.
-  - [Moore](http://www.moore.com/): Insights into the future of print technology and automation.
+- one account format: `userId,ws_token,jwt`
+- one working account file: `accounts.txt`
+- one direct claim flow: join room -> receive ACK -> send claim immediately
+- one debug harness: websocket packet tracing
 
 ---
 
-## 🔭 Current Focus
+## Active files
 
-At the moment, I am dedicating my time to two major areas:
+The active project is centered on these files:
 
-1. **Enhancing Production Efficiency**: I’m working on implementing new tools and automation systems at **Douglas LLC** to further improve the accuracy and speed of our production workflows. This includes the integration of new software solutions to minimize manual errors and optimize resource allocation.
-   
-2. **Technology & Learning**: I'm exploring the intersection of print production and emerging technologies like AI and IoT to see how they can be applied to streamline processes and improve sustainability in the printing industry. I believe that the future of print lies in its ability to adapt to the digital age while maintaining its tangible, high-quality appeal.
-
----
-
-## 💼 Professional Experience
-
-### **Print Production Planner — Douglas LLC**
-- **Role**: I am responsible for overseeing project timelines, managing vendor relationships, and ensuring that print materials meet both client expectations and company standards.
-- **Key Achievements**:
-  - Successfully reduced production time by 15% through workflow re-engineering and process automation.
-  - Implemented a quality control system that reduced errors and reprints by 25%.
-  - Spearheaded the integration of new project management software, resulting in improved collaboration between departments.
-
-### **Skills & Areas of Expertise**
-- **Project Management**: Skilled in leading both small and large-scale print projects, balancing quality, cost, and time efficiency.
-- **Process Optimization**: Identifying bottlenecks and implementing solutions to improve operational workflows.
-- **Vendor Management**: Building strong relationships with suppliers to ensure competitive pricing and timely deliveries.
-- **Software**: Familiar with production management tools, and always exploring new technologies to enhance workflows.
+- `tamilogin.py` - refreshes account data from the live login flow
+- `refresh_accounts.py` - writes fresh rows into `accounts.txt`
+- `simple_account_manager.py` - loads `userId,ws_token,jwt` rows
+- `simple_worker.py` - handles the join-and-claim path
+- `first_claim_runner.py` - schedules the first-claim attempt
+- `chat.py` - verbose websocket debug session for protocol inspection
+- `config.py` - centralized runtime settings
+- `runtime_state.py` - worker health and packet state
+- `speed_scheduler.py` - worker scheduling and bag prioritization
+- `resilience.py` - failure classification and protocol-drift detection
+- `scale_system.py` - tiered worker pools and throughput metrics
+- `todo.md` - roadmap and phase tracking
 
 ---
 
-## 📚 Always Learning
+## Account file format
 
-I believe in continuous development, and here are a few areas I'm currently exploring:
+`accounts.txt` uses one account per line:
 
-- **Automation Tools**: Studying how automation (especially in logistics and resource management) can be applied to print production to save time and resources.
-- **AI in Print**: Investigating how AI-driven algorithms can predict print run issues, optimize ink usage, and improve quality control.
-- **Sustainability**: Learning about sustainable practices in the print industry, including reducing waste and implementing eco-friendly materials and processes.
+```text
+userId,ws_token,jwt
+```
 
----
+Example:
 
-## 📫 How to Reach Me
-
-I'm always open to connecting with other professionals and enthusiasts in the print production and tech spaces. Feel free to reach out to me via:
-
-- **Email**: [ywaters@hotmail.com](mailto:ywaters@hotmail.com)
-- **LinkedIn**: *[Coming Soon]* (Feel free to add your LinkedIn link here if you have one)
-- **Personal Website**: *[Coming Soon]* (If you have a personal website, link it here)
+```text
+10673652,04b9864fab5436e8,eyJhbGciOiJIUzI1NiJ9...
+```
 
 ---
 
-## ⚡ Fun Fact
+## How to run the project
 
-When I’m not busy coordinating print production schedules or exploring new tech, I love traveling and learning about new cultures. My current location is quite the adventure—I'm based at a dynamic and remote location in **APO AE**, which keeps life interesting both personally and professionally!
+### 1) Refresh accounts from the live login flow
+
+```bash
+python tamilogin.py
+```
+
+Then regenerate the local account file:
+
+```bash
+python refresh_accounts.py
+```
+
+This writes the output into `accounts.txt` in the expected format.
+
+### 2) Validate the simplified worker flow
+
+```bash
+python validate_simple_worker.py --check
+```
+
+Or inspect the account file content:
+
+```bash
+python validate_simple_worker.py --accounts accounts.txt
+```
+
+### 3) Run a first-claim attempt
+
+```bash
+python first_claim_runner.py --accounts accounts.txt --room-id 123 --bag-id 999 --bag-value 50
+```
+
+Useful flags:
+
+- `--accounts` - account list path
+- `--room-id` - target room
+- `--bag-id` - LuckyBag to claim
+- `--bag-value` - optional value hint used for prioritization
+
+### 4) Run the websocket debug harness
+
+```bash
+python chat.py
+```
+
+This logs the actual sent and received websocket frames and is the best tool for protocol debugging when the server behavior changes.
+
+### 5) Run the dedicated speed/resilience/scale checks
+
+```bash
+python - <<'PY'
+from scale_system import AdaptiveMetrics, OpportunityQueue, build_worker_tiers
+from runtime_state import Account, RuntimeState
+
+state = RuntimeState(
+    accounts=[
+        Account(user_id=1, ws_token='a', jwt='x'),
+        Account(user_id=2, ws_token='b', jwt='y'),
+        Account(user_id=3, ws_token='c', jwt='z'),
+    ],
+    worker_health={
+        1: type('H', (), {'success_count': 4, 'failure_count': 0, 'is_healthy': True})(),
+        2: type('H', (), {'success_count': 1, 'failure_count': 1, 'is_healthy': True})(),
+        3: type('H', (), {'success_count': 0, 'failure_count': 4, 'is_healthy': False})(),
+    },
+)
+assert build_worker_tiers(state)[0].name == 'premium'
+queue = OpportunityQueue(); queue.enqueue({'bag_id': 1, 'value': 10, 'time': 100}); queue.enqueue({'bag_id': 2, 'value': 30, 'time': 200}); assert queue.pop_best()['bag_id'] == 2
+metrics = AdaptiveMetrics(); metrics.record_result(True, 5); metrics.record_result(False, 0); assert metrics.win_rate() == 0.5
+print('scale checks passed')
+PY
+```
 
 ---
 
-## 📊 GitHub Stats
+## Notes on the current design
 
-![Alexandra's GitHub stats](https://github-readme-stats.vercel.app/api?username=jessicawilliams&show_icons=true&theme=radical)
+The code is intentionally optimized for the shortest path to a valid response:
+
+1. load accounts from `accounts.txt`
+2. choose a suitable worker using health and scheduling logic
+3. join the room
+4. send claim immediately after the join ACK
+5. log the result and classify the failure if it fails
+
+The project is deliberately built for debugging and fast adaptation. If the upstream backend changes, the main thing you want to preserve is the packet-level tracing and the account/worker state model.
 
 ---
 
-## 🌟 Personal Philosophy
+## Cleanup status
 
-I believe in the power of **efficiency and innovation**. Whether it's improving production processes or exploring new ways to combine technology with traditional industries, I'm always looking for ways to innovate and streamline. My goal is simple: to make every project more efficient, impactful, and future-ready.
+Legacy experimental files that were not part of the current active workflow were removed to keep the repo lean and easier to reason about. The surviving codebase is the simplified, testable, debug-friendly path for the first-claim objective.
+
+---
+
+## Notable risks and caveats
+
+- The code is not production-ready in a security sense.
+- There are hardcoded tokens, secrets, and account data.
+- Some scripts appear to be prototypes or exploratory automation rather than a polished application.
+- There is no dependency management file, virtualenv setup, or test suite beyond a small websocket smoke test.
+- The code uses direct MD5-based signing logic and custom API payloads; any upstream change can break behavior immediately.
+- Some script names are inconsistent (`tamilogin.py`, `tamilsatgas.py`, `tamilscan.py`, `tamilturis.py`), suggesting a rapid experimental project rather than a cleanly named codebase.
+
+---
+
+## Suggested next steps
+
+If you want to continue developing this project, the most useful improvements would be:
+
+1. Move secrets and tokens into environment variables or a secure config manager.
+2. Add a real dependency file such as `requirements.txt`.
+3. Standardize script naming and entry points.
+4. Add structured logging and retry handling.
+5. Add real tests around the scanner-to-satgas and satgas-to-worker lifecycle.
+6. Replace ad hoc payload generation with a clearer modular API client.
+
+---
+
+## Summary
+
+This repository is best understood as a custom automation pipeline for a LuckyBag reward system. It is built around:
+
+- API signing and login flows
+- room scanning for reward events
+- websocket task relay architecture
+- worker bots that claim rewards in real time
+
+It is functional as a prototype or script stack, but it depends heavily on hardcoded data, live external services, and a fragile trust model around the upstream game backend.
