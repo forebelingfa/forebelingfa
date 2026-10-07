@@ -8,8 +8,11 @@ import time
 
 import websocket
 
+from check_gold import GoldCheckError, get_user_info
+from config import DEFAULT_CONFIG
+from simple_account_manager import load_accounts
+
 TAMIL_WS_URL = "ws://47.84.51.23:9001"
-TAMIL_API_BASE = "https://api.taalmil.live/api"
 TAMIL_SECRET = "uwkeovuoqnpn@13vxck9tjghazhhbrmy"
 
 
@@ -53,6 +56,28 @@ def claim_payload(lucky_bag_id: int):
         "op": 2101,
         "body": {"ID": lucky_bag_id},
     }
+
+
+def resolve_live_room_id(live_user_id: int, jwt_token: str) -> int:
+    try:
+        response = get_user_info(live_user_id, jwt_token)
+    except GoldCheckError as exc:
+        raise RuntimeError(f"Could not look up live user {live_user_id}: {exc}") from exc
+
+    data = response.get("data", {})
+    room_id = data.get("room_id") if isinstance(data, dict) else None
+    try:
+        room_id = int(room_id)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"No active room found for user {live_user_id}; the profile returned no room ID."
+        ) from exc
+
+    if room_id <= 0:
+        raise RuntimeError(
+            f"No active room found for user {live_user_id}; the profile returned room ID {room_id}."
+        )
+    return room_id
 
 
 def make_ws_client(room_id: int, user_id: int, token: str, lucky_bag_id: int | None = None, max_runtime: int = 300):
@@ -145,22 +170,48 @@ def run_room(room_id: int, user_id: int, token: str, lucky_bag_id: int | None = 
     ws.run_forever(ping_interval=30, ping_timeout=10)
 
 
+def run_live_user(
+    live_user_id: int,
+    account: dict,
+    lucky_bag_id: int | None = None,
+    max_runtime: int = 300,
+) -> int:
+    room_id = resolve_live_room_id(live_user_id, str(account["jwt"]))
+    print(f"Live user {live_user_id} is in room {room_id}; joining with account {account['user_id']}.")
+    run_room(
+        room_id=room_id,
+        user_id=int(account["user_id"]),
+        token=str(account["ws_token"]),
+        lucky_bag_id=lucky_bag_id,
+        max_runtime=max_runtime,
+    )
+    return room_id
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Tamil websocket room join/send equivalent of dazz/send_messages.py")
-    parser.add_argument("--room-id", type=int, required=True)
-    parser.add_argument("--user-id", type=int, required=True)
-    parser.add_argument("--token", type=str, required=True)
+    parser = argparse.ArgumentParser(description="Join the room of a live Tamil user and handle LuckyBag messages.")
+    parser.add_argument("--live-user-id", type=int, required=True, help="User ID of the live host; room ID is resolved from their profile")
+    parser.add_argument("--accounts", default=DEFAULT_CONFIG.account_file, help="Account file in userId,ws_token,jwt format")
+    parser.add_argument("--account-index", type=int, default=DEFAULT_CONFIG.account_index, help="Zero-based account used to join and look up the live room")
     parser.add_argument("--bag-id", type=int, default=None, help="Lucky bag ID to claim immediately after join ack")
     parser.add_argument("--max-runtime", type=int, default=300, help="Auto-close after N seconds")
     args = parser.parse_args()
 
-    run_room(
-        room_id=args.room_id,
-        user_id=args.user_id,
-        token=args.token,
-        lucky_bag_id=args.bag_id,
-        max_runtime=args.max_runtime,
-    )
+    accounts = load_accounts(args.accounts)
+    if args.account_index < 0 or args.account_index >= len(accounts):
+        parser.error(f"--account-index must be between 0 and {len(accounts) - 1}")
+    if args.max_runtime <= 0:
+        parser.error("--max-runtime must be positive")
+
+    try:
+        run_live_user(
+            live_user_id=args.live_user_id,
+            account=accounts[args.account_index],
+            lucky_bag_id=args.bag_id,
+            max_runtime=args.max_runtime,
+        )
+    except RuntimeError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

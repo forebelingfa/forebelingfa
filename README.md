@@ -42,6 +42,16 @@ python first_claim_runner.py --accounts accounts.txt --room-id 123 --bag-id 999
 python first_claim_runner.py --poll --poll-seconds 3
 ```
 
+## Join a live user's room
+
+Pass the live host's user ID. The sender uses the selected account's JWT to look up the host profile, resolves its active room ID, then joins with that account's websocket token.
+
+```bash
+python send_messages.py --live-user-id 10597440 --accounts accounts.txt --account-index 0
+```
+
+Add `--bag-id ID` to attempt a specific LuckyBag after joining, or `--max-runtime SECONDS` to change the connection limit.
+
 ## Notes
 
 The claim path is intentionally minimal and optimized for one objective: claim the bag as soon as the room login is confirmed.
