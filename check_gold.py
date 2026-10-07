@@ -7,97 +7,12 @@ import json
 import os
 import tempfile
 import time
-import uuid
-from hashlib import md5
-from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
-
+from api import TamilAPIError, get_user_info
 from config import DEFAULT_CONFIG
 from simple_account_manager import load_accounts
-
-API_SIGNING_SECRET = "5d206b343f87f2ca3a0aa05c58b9a64d"
-API_URL = "https://api.taalmil.live/api/member/info"
-APP_VERSION = "2.1.5"
-TRANSIENT_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
-
-
-def generate_sign_from_payload(payload: Dict[str, Any]) -> str:
-    filtered = {
-        k: v
-        for k, v in payload.items()
-        if k not in {"CREATOR", "serialVersionUID", "sign"}
-    }
-    sorted_items = sorted(filtered.items())
-    param_str = "&".join(f"{k}={v}" for k, v in sorted_items)
-    return md5(f"{param_str}&key={API_SIGNING_SECRET}".encode("utf-8")).hexdigest()
-
-
-class GoldCheckError(RuntimeError):
-    pass
-
-
-def get_user_info(
-    user_id: str | int,
-    jwt_token: str,
-    timeout: float = 10,
-    retries: int = 2,
-) -> Dict[str, Any]:
-    headers = {
-        "User-Agent": APP_VERSION,
-        "Accept-Encoding": "gzip",
-        "Content-Type": "application/json; charset=UTF-8",
-        "encrypt-type": "1",
-        "cache-control": "no-cache",
-        "authorization-token": jwt_token.strip(),
-    }
-
-    for attempt in range(retries + 1):
-        payload = {
-            "id": str(user_id),
-            "version": "1.0",
-            "app_version": APP_VERSION,
-            "channel_id": "3",
-            "device_id": uuid.uuid4().hex,
-            "facility": "1",
-            "lang": "id",
-            "package_type": "Android-Google",
-            "sign": "",
-            "time": str(int(time.time())),
-            "user_id": str(user_id),
-        }
-        payload["sign"] = generate_sign_from_payload(payload)
-
-        try:
-            response = requests.post(API_URL, json=payload, headers=headers, timeout=timeout)
-            if response.status_code in TRANSIENT_HTTP_STATUSES and attempt < retries:
-                time.sleep(min(0.5 * (2 ** attempt), 4))
-                continue
-            response.raise_for_status()
-            result = response.json()
-        except requests.RequestException as exc:
-            if attempt < retries:
-                time.sleep(min(0.5 * (2 ** attempt), 4))
-                continue
-            raise GoldCheckError(f"request failed: {exc}") from exc
-        except ValueError as exc:
-            raise GoldCheckError("server returned invalid JSON") from exc
-
-        if not isinstance(result, dict):
-            raise GoldCheckError("server response was not a JSON object")
-        code = result.get("code")
-        if str(code) not in {"0", "200"}:
-            message = result.get("msg") or result.get("message") or "no error message"
-            raise GoldCheckError(f"API code={code}: {message}")
-
-        data = result.get("data")
-        if not isinstance(data, dict) or "gold" not in data:
-            raise GoldCheckError("successful response did not contain data.gold")
-        return result
-
-    raise GoldCheckError("request failed after retries")
-
 
 def _check_account(account: Dict[str, Any], timeout: float, retries: int) -> Dict[str, Any]:
     user_id = account["user_id"]
@@ -115,7 +30,7 @@ def _check_account(account: Dict[str, Any], timeout: float, retries: int) -> Dic
         # print(data)
         result["nickname"] = data.get("nickname", "N/A")
         result["gold"] = int(data["gold"])
-    except (GoldCheckError, TypeError, ValueError) as exc:
+    except (TamilAPIError, TypeError, ValueError) as exc:
         result["error"] = str(exc)
     return result
 

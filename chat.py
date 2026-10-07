@@ -13,7 +13,7 @@ import websocket
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
-from check_gold import GoldCheckError, get_user_info
+from api import TamilAPIError, get_user_info
 from config import DEFAULT_CONFIG
 from send_messages import TAMIL_WS_URL, resolve_live_room_id, room_login_payload
 from simple_account_manager import load_accounts
@@ -276,7 +276,7 @@ def _account_profile(account: Dict[str, Any]) -> Dict[str, Any]:
         data = response.get("data", {})
         if isinstance(data, dict):
             return data
-    except GoldCheckError as exc:
+    except TamilAPIError as exc:
         print(f"Profile lookup failed; using account ID as nickname: {exc}")
     return {}
 

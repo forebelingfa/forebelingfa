@@ -1,49 +1,27 @@
-# Dazz read confirmation
+# Tamil TODO
 
-I read the actual Dazz implementation set that matters for runtime behavior and comparison, and this is the evidence snapshot.
+## Implemented
 
-## Confirmed Dazz files reviewed
+- Account loading uses `userId,ws_token,jwt`: [simple_account_manager.py](simple_account_manager.py)
+- Direct LuckyBag claim and room discovery: [simple_worker.py](simple_worker.py), [room_poller.py](room_poller.py), [first_claim_runner.py](first_claim_runner.py)
+- Shared Tamil API client for signed member-info and hot-anchor calls: [api.py](api.py)
+- Gold lookup uses the shared member-info API: [check_gold.py](check_gold.py)
+- Live-user room lookup and websocket sender: [send_messages.py](send_messages.py)
+- Interactive chat client: [chat.py](chat.py)
+- JWT-claim inspection, profile/gold/level scans, merge, and dedupe: [helper.py](helper.py)
+- Favorite-anchor watcher: [check_favorite.py](check_favorite.py); verified against the live hot-anchor endpoint
 
-- [dazz/api.py](dazz/api.py) — REST auth, user-info, signing helpers, and Dazz API access patterns.
-- [dazz/binding.py](dazz/binding.py) — email / account binding flows and payload signing routines.
-- [dazz/chat.py](dazz/chat.py) — websocket chat handling, message parsing, and live room interaction logic.
-- [dazz/check_favorite.py](dazz/check_favorite.py) — favorite-anchor watcher that polls hot anchors and tracks live state.
-- [dazz/check_gold.py](dazz/check_gold.py) — gold checks from account files and batch balance scanning.
-- [dazz/constant.py](dazz/constant.py) — shared app version, favorite anchor IDs, and runtime constants.
-- [dazz/gifting.py](dazz/gifting.py) — websocket gift/send flow and live room routines with reconnect/watchdog logic.
-- [dazz/global_luckybag.py](dazz/global_luckybag.py) — the main LuckyBag detection and room-switching pattern.
-- [dazz/h5.py](dazz/h5.py) — H5 task/sign workflow and signed API usage for web tasks.
-- [dazz/helper.py](dazz/helper.py) — checkpointing, hot-anchor scanning, user-info fetch, and account separation helpers.
-- [dazz/lokal_luckybag.py](dazz/lokal_luckybag.py) — the resilient websocket worker loop with reconnect and runtime control.
-- [dazz/mailisa.py](dazz/mailisa.py) — OTP email polling and 6-digit code extraction.
-- [dazz/paha.py](dazz/paha.py) — betting / poor-token batch flow using protobuf-like packet construction.
-- [dazz/pemisah.py](dazz/pemisah.py) — account segregation by gold and file rewriting.
-- [dazz/red_packet.py](dazz/red_packet.py) — hot-room scanning and LuckyBag claim orchestration.
-- [dazz/send_messages.py](dazz/send_messages.py) — direct websocket messaging / claim-style live worker sample.
-- [dazz/misc/check_point.py](dazz/misc/check_point.py) — account gold-check utility and blacklisting script.
-- [dazz/misc/reverse_file.py](dazz/misc/reverse_file.py) — simple file reversal utility; not live logic, but part of the Dazz sample set.
+## Next
 
-## What this confirms
+- [ ] Smoke-test chat and sender websocket join/message handling in a live room
+- [ ] Port LuckyBag event detection (`2100`), anchor-room switching, reconnect/watchdog, and claim verification into the Tamil worker
+- [ ] Add focused regression tests for account parsing, API signing, room resolution, and chat payloads
+- [ ] Port additional Dazz API operations only after their Tamil endpoints and payloads are confirmed; Dazz H5 task/sign and password-reset routes returned 404
+- [ ] Find a Tamil endpoint that actually validates JWT/session status; `member/info` is public
 
-- Dazz is not just a collection of examples; it is a full operational runtime pattern.
-- The key live logic is built around:
-  - hot anchor / room discovery via `home/hot_anchor`
-  - websocket join payloads on op `1001`
-  - LuckyBag event detection on op `2100` with `LuckyBagData`
-  - room switching to the anchor room
-  - claim execution on op `2101`
-  - reconnects, watchdogs, and runtime cleanup
-  - token health and account segregation
-- The missing layer in Tamil is not “more files”; it is the Dazz runtime behavior that keeps the worker alive and fast enough to compete.
+## Dazz reference reviewed
 
-## Tamil status after comparison
-
-- [simple_worker.py](simple_worker.py) — working minimal direct join + claim path
-- [room_poller.py](room_poller.py) — minimal room discovery/polling path
-- [first_claim_runner.py](first_claim_runner.py) — compact runner for direct or poll mode
-- [config.py](config.py) — compact runtime config and endpoint fallback list
-- [simple_account_manager.py](simple_account_manager.py) — simplified account loader for `userId,ws_token,jwt`
-
-## Bottom line
-
-The Dazz files were read and used as the runtime reference baseline. The Tamil repo is now intentionally compact, but the next real step is to port the Dazz operational protections: room-switch detection, reconnect loop, watchdog, token health handling, and gold verification after claim.
+- API and account flows: [dazz/api.py](dazz/api.py), [dazz/binding.py](dazz/binding.py), [dazz/h5.py](dazz/h5.py), [dazz/mailisa.py](dazz/mailisa.py)
+- Chat and room workers: [dazz/chat.py](dazz/chat.py), [dazz/gifting.py](dazz/gifting.py), [dazz/global_luckybag.py](dazz/global_luckybag.py), [dazz/lokal_luckybag.py](dazz/lokal_luckybag.py), [dazz/red_packet.py](dazz/red_packet.py), [dazz/send_messages.py](dazz/send_messages.py)
+- Discovery, balances, and account utilities: [dazz/check_favorite.py](dazz/check_favorite.py), [dazz/check_gold.py](dazz/check_gold.py), [dazz/helper.py](dazz/helper.py), [dazz/pemisah.py](dazz/pemisah.py), [dazz/misc/check_point.py](dazz/misc/check_point.py), [dazz/misc/reverse_file.py](dazz/misc/reverse_file.py)
+- Shared values and separate game protocol: [dazz/constant.py](dazz/constant.py), [dazz/paha.py](dazz/paha.py)

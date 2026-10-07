@@ -8,7 +8,7 @@ import time
 
 import websocket
 
-from check_gold import GoldCheckError, get_user_info
+from api import TamilAPIError, get_user_info
 from config import DEFAULT_CONFIG
 from simple_account_manager import load_accounts
 
@@ -61,7 +61,7 @@ def claim_payload(lucky_bag_id: int):
 def resolve_live_room_id(live_user_id: int, jwt_token: str) -> int:
     try:
         response = get_user_info(live_user_id, jwt_token)
-    except GoldCheckError as exc:
+    except TamilAPIError as exc:
         raise RuntimeError(f"Could not look up live user {live_user_id}: {exc}") from exc
 
     data = response.get("data", {})
