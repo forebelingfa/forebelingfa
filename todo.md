@@ -10,11 +10,13 @@
 - Interactive chat client: [chat.py](chat.py)
 - JWT-claim inspection, profile/gold/level scans, merge, and dedupe: [helper.py](helper.py)
 - Favorite-anchor watcher: [check_favorite.py](check_favorite.py); verified against the live hot-anchor endpoint
+- Rust LuckyBag scanner, room dispatcher, and bounded websocket worker: [tamil/src/red_packet.rs](tamil/src/red_packet.rs)
 
 ## Next
 
 - [ ] Smoke-test chat and sender websocket join/message handling in a live room
-- [ ] Port LuckyBag event detection (`2100`), anchor-room switching, reconnect/watchdog, and claim verification into the Tamil worker
+- [ ] Smoke-test the Rust worker's websocket join and claim acknowledgments when a bag-marked Tamil room is available
+- [ ] Add `op 2100` anchor-room switching; the Rust worker currently scans and joins rooms marked by the hot-anchor API
 - [ ] Add focused regression tests for account parsing, API signing, room resolution, and chat payloads
 - [ ] Port additional Dazz API operations only after their Tamil endpoints and payloads are confirmed; Dazz H5 task/sign and password-reset routes returned 404
 - [ ] Find a Tamil endpoint that actually validates JWT/session status; `member/info` is public

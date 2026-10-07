@@ -23,6 +23,7 @@ This repo is intentionally compact:
 - `send_messages.py` - websocket room sender
 - `chat.py` - interactive room chat client
 - `helper.py` - JWT-claim inspection, profile, gold/level, merge, and dedupe utilities
+- `tamil/` - Rust LuckyBag room scanner and worker dispatcher
 
 ## Account format
 
@@ -47,6 +48,38 @@ python first_claim_runner.py --accounts accounts.txt --room-id 123 --bag-id 999
 ```bash
 python first_claim_runner.py --poll --poll-seconds 3
 ```
+
+## Rust LuckyBag worker
+
+Scan Tamil's hot-anchor endpoint without opening WebSockets:
+
+```bash
+cargo run --manifest-path tamil/Cargo.toml -- --accounts accounts.txt --scan-only --max-pages 1
+```
+
+Run the room scanner and dispatcher:
+
+```bash
+cargo run --release --manifest-path tamil/Cargo.toml -- --accounts accounts.txt
+```
+
+The worker reads `userId,ws_token,jwt` accounts, filters `red_packet_logo`, follows countdown announcements, and sends a bounded claim burst when a bag opens. Run `cargo run --manifest-path tamil/Cargo.toml -- --help` for worker, scan, and claim settings.
+
+## Rust LuckyBag worker
+
+Scan the live Tamil hot-anchor endpoint without opening sockets:
+
+```bash
+cargo run --manifest-path tamil/Cargo.toml -- --accounts accounts.txt --scan-only --max-pages 1
+```
+
+Run the scanner and dispatch workers to rooms marked with a LuckyBag:
+
+```bash
+cargo run --release --manifest-path tamil/Cargo.toml -- --accounts accounts.txt
+```
+
+The scanner uses the selected account's JWT; websocket workers use each account's `ws_token`. Worker count, group size, scan interval, shift limits, and claim burst are configurable; run with `--help` for options.
 
 ## Account helper
 
