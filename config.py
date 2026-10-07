@@ -12,6 +12,14 @@ class RuntimeConfig:
     account_index: int = 0
     log_level: str = "INFO"
     poll_url: str = "https://api.taalmil.live/api/go_v3/hot_anchor"
+    poll_urls: tuple[str, ...] = (
+        "https://api.taalmil.live/api/go_v3/hot_anchor",
+        "https://api.taalmil.live/api/v3/hot_anchor",
+        "https://api.taalmil.live/api/v2/hot_anchor",
+        "https://api.taalmil.live/api/go_v3/hotroom",
+        "https://api.taalmil.live/api/go_v3/room_list",
+        "https://api.taalmil.live/api/go_v3/rooms",
+    )
     poll_interval_seconds: float = 5.0
 
     @property

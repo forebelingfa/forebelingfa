@@ -30,10 +30,25 @@ class RoomPoller:
         endpoint: str = DEFAULT_CONFIG.poll_url,
         session: Optional[Any] = None,
         poll_interval_seconds: float = 5.0,
+        fallback_endpoints: Optional[List[str]] = None,
     ) -> None:
         self.endpoint = endpoint
         self.poll_interval_seconds = poll_interval_seconds
         self.session = session or (requests.Session() if requests is not None else None)
+        self.fallback_endpoints = list(
+            fallback_endpoints if fallback_endpoints is not None else DEFAULT_CONFIG.poll_urls
+        )
+        if self.endpoint not in self.fallback_endpoints:
+            self.fallback_endpoints.insert(0, self.endpoint)
+
+    def _candidate_endpoints(self) -> List[str]:
+        ordered = []
+        seen = set()
+        for url in self.fallback_endpoints:
+            if url and url not in seen:
+                seen.add(url)
+                ordered.append(url)
+        return ordered
 
     @staticmethod
     def _coerce_int(value: Any, default: int = 0) -> int:
@@ -102,24 +117,32 @@ class RoomPoller:
         )
 
     def poll_once(self) -> List[RoomOpportunity]:
-        if not self.endpoint:
-            return []
-        if self.session is None:
+        if not self.session:
             return []
 
-        try:
-            response = self.session.get(self.endpoint, timeout=10)
-            response.raise_for_status()
-            payload = response.json()
-        except Exception:
-            return []
+        for url in self._candidate_endpoints():
+            try:
+                response = self.session.get(url, timeout=10)
+                response.raise_for_status()
+                payload = response.json()
+            except Exception:
+                continue
 
-        opportunities: List[RoomOpportunity] = []
-        for room in self._extract_rows(payload):
-            parsed = self._parse_room(room)
-            if parsed is not None:
-                opportunities.append(parsed)
-        return opportunities
+            if isinstance(payload, dict):
+                code = payload.get("code")
+                message = payload.get("message")
+                if code not in (None, 0, 200) and "System Error" in str(message or ""):
+                    continue
+
+            opportunities: List[RoomOpportunity] = []
+            for room in self._extract_rows(payload):
+                parsed = self._parse_room(room)
+                if parsed is not None:
+                    opportunities.append(parsed)
+            if opportunities:
+                return opportunities
+
+        return []
 
     def poll_forever(self, max_iterations: Optional[int] = None) -> Iterable[RoomOpportunity]:
         iterations = 0
