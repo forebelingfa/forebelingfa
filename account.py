@@ -653,8 +653,8 @@ def run_confirm_bind(ticket, email, otp, token):
 
 if __name__ == "__main__":
 
-    # d_serial = "266c3127"
-    d_serial = "27959bfa7cf4"
+    d_serial = "266c3127"
+    # d_serial = "27959bfa7cf4"
     TIMEOUT = 60
     MAX_TAMIL_ACCOUNTS_PER_GOOGLE = 5
     d = u2.connect(serial=d_serial)  # auto-detect USB
@@ -664,12 +664,12 @@ if __name__ == "__main__":
     login_google_account = 1
     # Define a maximum number of retries to prevent infinite loops
     MAX_VERIFICATION_RETRIES = 6
-    sf7=14
+    sf7=20
     for mail_num_idx in range(56):
         
 
         
-        EMAIL = f"adv{sf7+mail_num_idx}@gosmail.xyz"
+        EMAIL = f"duj{sf7+mail_num_idx}@gosmail.xyz"
         PASSWORD = "qwertyui"
 
         # --- Start of the loop to ensure the account is present ---
