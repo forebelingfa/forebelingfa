@@ -1,0 +1,89 @@
+     ____
+    / _  |   Frida 17.3.2 - A world-class dynamic instrumentation toolkit
+   | (_| |
+    > _  |   Commands:
+   /_/ |_|       help      -> Displays the help system
+   . . . .       object?   -> Display information about 'object'
+   . . . .       exit/quit -> Exit
+   . . . .
+   . . . .   More info at https://frida.re/docs/home/
+   . . . .
+   . . . .   Connected to Pixel XL (id=266c3127)
+Attaching...
+[Pixel XL::Taal Mil ]-> [TAMIL] Monitoring OkHttp requests and Tamil Google-auth responses
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/language_file
+[TAMIL] POST api.taalmil.live/api/simple/mdian
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/tourist/config
+[TAMIL] POST api.taalmil.live/api/simple/mdian
+[TAMIL] POST api.taalmil.live/api/simple/mdian
+[TAMIL] POST api.taalmil.live/api/simple/mdian
+[TAMIL] POST api.taalmil.live/api/simple/mdian
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/google_auth
+AUTH_RESULT:{"jwt":"eyJ0eXAiOiJKV1QiLCAiYWxnIjoiU0hBMjU2In0.eyJpc3MiOiIiLCJpYXQiOjE3OTE0MzU1OTgsImV4cCI6MTc5MjA0MDM5OCwidXNlcl9pZCI6MTA2Nzc1NDEsInRvdXJpc3RfdXJpIjoiIn0.e5c7f35e1e67ee3709762b7eaa6d9f89b7366de0f1469569eea0b5ffdb41f9a4","user_id":"10677541"}
+[TAMIL] POST api.taalmil.live/api/game/loginConfig
+[TAMIL] POST api.taalmil.live/api/roomgame/line
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/zego_token
+[TAMIL] POST api.taalmil.live/api/member/token
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/room-interaction-msg/list
+[TAMIL] POST api.taalmil.live/api/simple/config
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/machine
+[TAMIL] POST api.taalmil.live/api/simple/mdian
+[TAMIL] POST api.taalmil.live/api/apiaudit/check_audit
+[TAMIL] GET 43.106.25.103/
+[TAMIL] POST api.taalmil.live/api/game/loginConfig
+[TAMIL] POST api.taalmil.live/api/public/rong_token
+[TAMIL] POST api.taalmil.live/api/video/check_noob
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/act_window
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/task_complete_num
+[TAMIL] POST api.taalmil.live/api/mall/rich_config
+[TAMIL] POST api.taalmil.live/api/game/game_level_config
+[TAMIL] POST api.taalmil.live/api/game/loginConfig
+[TAMIL] POST api.taalmil.live/api/game/game_index
+[TAMIL] POST api.taalmil.live/api/hot/region_list
+[TAMIL] POST api.taalmil.live/api/member/info
+[TAMIL] POST api.taalmil.live/api/simple/banner
+[TAMIL] POST api.taalmil.live/api/simple/banner
+[TAMIL] POST api.taalmil.live/api/simple/banner
+[TAMIL] POST api.taalmil.live/api/resource/getResourcePosition
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/sysmsg_list
+[TAMIL] POST api.taalmil.live/api/public/gift_new
+[TAMIL] POST api.taalmil.live/api/public/gift_new
+[TAMIL] POST api.taalmil.live/api/simple/banner
+[TAMIL] POST api.taalmil.live/api/roomgame/vip_gift
+[TAMIL] POST api.taalmil.live/api/roomgame/vip_gift
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/first_recharge
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/second_recharge
+[TAMIL] GET cdn.taalmil.live/
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef2fab4a569.mp4
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef306f3e54b.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241001/66fbc6535c7ee.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241226/676d2cf7b5f95.zip
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/push_switch
+[TAMIL] POST api.taalmil.live/api/hot/hot_anchor
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/day_recharge_status
+[TAMIL] POST api.taalmil.live/api/hot/hot_anchor
+[TAMIL] POST api.taalmil.live/api/go_v3/limoo/sysmsg_list
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241226/676d2cf7b5f95.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef306f3e54b.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef2fab4a569.mp4
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241001/66fbc6535c7ee.zip
+[TAMIL] GET cdn.taalmil.live/
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241001/66fbc620705f0.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241226/676d2cca62bd1.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241001/66fbc73e920e2.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241001/66fbc620705f0.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241226/676d2cca62bd1.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241226/676d2cfed1b0e.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef2fa04bd05.mp4
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241001/66fbc73e920e2.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef2fa04bd05.mp4
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef3064bb915.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20241226/676d2cfed1b0e.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef2fbfdaeff.mp4
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef305991c7c.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef3064bb915.zip
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef2fbfdaeff.mp4
+[TAMIL] GET cdn.taalmil.live/upload/tmp/20260427/69ef305991c7c.zip
+Process terminated
+
+Thank you for using Frida!
