@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
 use futures_util::{stream, SinkExt, StreamExt};
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT_ENCODING, CONTENT_TYPE, USER_AGENT};
 use serde_json::{json, Map, Value};
 use std::cmp::min;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -17,10 +17,13 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use uuid::Uuid;
 
 const API_BASE: &str = "https://api.taalmil.live/api";
+const TOURIST_API_VERSION: &str = "1.2.0";
+const TOURIST_USER_AGENT: &str = "2.1.1";
 const WS_URL: &str = "ws://47.84.51.23:9001";
 const API_SIGNING_SECRET: &str = "5d206b343f87f2ca3a0aa05c58b9a64d";
 const WS_SIGNING_SECRET: &str = "uwkeovuoqnpn@13vxck9tjghazhhbrmy";
 const APP_VERSION: &str = "2.1.5";
+const SMART_DISPATCH_LEAD: Duration = Duration::from_secs(5);
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";
 const YELLOW: &str = "\x1b[33m";
@@ -28,6 +31,8 @@ const CYAN: &str = "\x1b[36m";
 const GRAY: &str = "\x1b[90m";
 const RESET: &str = "\x1b[0m";
 
+// def log(logging: bool, category: str, message: str):
+//     ...
 fn log(logging: bool, category: &str, message: impl AsRef<str>) {
     if !logging {
         return;
@@ -55,6 +60,8 @@ fn log(logging: bool, category: &str, message: impl AsRef<str>) {
     );
 }
 
+// def print_banner(logging: bool):
+//     ...
 fn print_banner(logging: bool) {
     if !logging {
         return;
@@ -67,6 +74,9 @@ fn print_banner(logging: bool) {
     println!("{GREEN}🦜 Tamil LuckyBag Rust worker v{APP_VERSION}{RESET}\n");
 }
 
+// class LoggingMode(Enum):
+//     ON = ...
+//     OFF = ...
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 enum LoggingMode {
     #[default]
@@ -74,6 +84,8 @@ enum LoggingMode {
     Off,
 }
 
+// class Args:
+//     ...
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Scan Tamil hot rooms and dispatch bounded LuckyBag workers")]
 struct Args {
@@ -96,7 +108,7 @@ struct Args {
     #[arg(
         long,
         default_value_t = 3,
-        help = "Maximum accounts assigned per room, including in --local-luckybag mode"
+        help = "Maximum accounts per room for normal and --local-luckybag modes; smart mode uses --max-workers"
     )]
     workers_per_room: usize,
 
@@ -134,6 +146,13 @@ struct Args {
     )]
     local_luckybag: bool,
 
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        help = "Use the tourist scout to queue workers for bags close to opening"
+    )]
+    smart_luckybag: bool,
+
     #[arg(long, default_value_t = 1_200)]
     local_refresh_secs: u64,
 
@@ -145,12 +164,14 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "ROOM_ID",
-        help = "Join one room, report the server response, and exit without claiming"
+        value_name = "LIVE_USER_ID",
+        help = "Live user ID; resolve their active room and remain connected until Ctrl+C"
     )]
     join: Option<u64>,
 }
 
+// class Account:
+//     ...
 #[derive(Clone, Debug)]
 struct Account {
     user_id: u64,
@@ -158,6 +179,8 @@ struct Account {
     jwt: String,
 }
 
+// class BagRoom:
+//     ...
 #[derive(Clone, Debug)]
 struct BagRoom {
     room_id: u64,
@@ -165,15 +188,43 @@ struct BagRoom {
     nickname: String,
 }
 
+// class WorkerConfig:
+//     ...
 #[derive(Clone)]
 struct WorkerConfig {
     idle_timeout: Duration,
     max_shift: Duration,
     claim_attempts: usize,
     claim_delay: Duration,
+    finish_after_claim: bool,
     logging: bool,
 }
 
+#[derive(Clone, Debug)]
+struct TouristAccount {
+    token: String,
+    api_token: String,
+    tourist_id: u64,
+}
+
+#[derive(Clone, Debug)]
+struct PendingSmartBag {
+    bag_id: u64,
+    room: BagRoom,
+    opens_at: tokio::time::Instant,
+}
+
+struct SmartWorkerPool {
+    accounts: Arc<Mutex<VecDeque<Account>>>,
+    active_rooms: Arc<Mutex<HashSet<u64>>>,
+    worker_semaphore: Arc<Semaphore>,
+    worker_config: WorkerConfig,
+    workers_per_room: usize,
+    stop: Arc<AtomicBool>,
+}
+
+// class ClaimBurstConfig:
+//     ...
 struct ClaimBurstConfig {
     bag_id: u64,
     room_id: u64,
@@ -184,6 +235,8 @@ struct ClaimBurstConfig {
     logging: bool,
 }
 
+// def resolve_account_path(requested: Path) -> Path:
+//     ...
 fn resolve_account_path(requested: &Path) -> PathBuf {
     if requested.is_absolute() || requested.is_file() {
         return requested.to_path_buf();
@@ -199,10 +252,14 @@ fn resolve_account_path(requested: &Path) -> PathBuf {
     requested.to_path_buf()
 }
 
+// def now_seconds() -> int:
+//     ...
 fn now_seconds() -> Result<u64> {
     Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
 }
 
+// def generate_sign(payload: dict[str, Value]) -> str:
+//     ...
 fn generate_sign(payload: &Map<String, Value>) -> String {
     let mut sorted_params = BTreeMap::<String, String>::new();
     for (key, value) in payload {
@@ -230,6 +287,8 @@ fn generate_sign(payload: &Map<String, Value>) -> String {
     )
 }
 
+// def build_hot_anchor_payload(user_id: int, page: int) -> dict[str, Value]:
+//     ...
 fn build_hot_anchor_payload(user_id: u64, page: u64) -> Result<Map<String, Value>> {
     let mut payload = Map::new();
     payload.insert("classify_id".to_string(), json!(0));
@@ -250,6 +309,102 @@ fn build_hot_anchor_payload(user_id: u64, page: u64) -> Result<Map<String, Value
     let signature = generate_sign(&payload);
     payload.insert("sign".to_string(), json!(signature));
     Ok(payload)
+}
+
+// def parse_account_line(line: str, line_number: int) -> Account | None:
+//     ...
+fn build_tourist_token_payload() -> Result<Map<String, Value>> {
+    let mut payload = Map::new();
+    payload.insert("code_type".to_string(), json!(0));
+    payload.insert("isVpn".to_string(), json!("0"));
+    payload.insert("network".to_string(), json!("Organic"));
+    payload.insert("type".to_string(), json!(0));
+    payload.insert("userCountry".to_string(), json!(""));
+    payload.insert("app_version".to_string(), json!(TOURIST_API_VERSION));
+    payload.insert("channel_id".to_string(), json!("3"));
+    payload.insert(
+        "device_id".to_string(),
+        json!(Uuid::new_v4().simple().to_string()),
+    );
+    payload.insert("facility".to_string(), json!("1"));
+    payload.insert("lang".to_string(), json!("id"));
+    payload.insert("package_type".to_string(), json!("Android-Google"));
+    payload.insert("time".to_string(), json!(now_seconds()?.to_string()));
+    payload.insert("tourist_uri".to_string(), json!(""));
+    payload.insert("user_id".to_string(), json!("0"));
+    let signature = generate_sign(&payload);
+    payload.insert("sign".to_string(), json!(signature));
+    Ok(payload)
+}
+
+fn parse_tourist_token_response(body: &Value) -> Result<TouristAccount> {
+    if !is_success_code(body) {
+        return Err(anyhow!(
+            "tourist-token API code {}: {}",
+            body["code"],
+            body["msg"]
+                .as_str()
+                .or_else(|| body["message"].as_str())
+                .unwrap_or("no message")
+        ));
+    }
+    let data = body
+        .get("data")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("tourist-token response did not contain an account object"))?;
+    let token = ["token", "ws_token", "visitor_token"]
+        .iter()
+        .find_map(|key| data.get(*key).and_then(Value::as_str))
+        .filter(|token| !token.trim().is_empty())
+        .ok_or_else(|| anyhow!("tourist-token response did not contain a websocket token"))?;
+    let tourist_id = data
+        .get("tourist_id")
+        .and_then(value_u64)
+        .filter(|id| *id > 0)
+        .ok_or_else(|| anyhow!("tourist-token response did not contain a positive tourist_id"))?;
+    let api_token = [
+        "jwt_token",
+        "jwt_authorization_token",
+        "jwt",
+        "authorization_token",
+    ]
+    .iter()
+    .find_map(|key| data.get(*key).and_then(Value::as_str))
+    .filter(|token| !token.trim().is_empty())
+    .ok_or_else(|| anyhow!("tourist-token response did not contain a JWT"))?;
+    Ok(TouristAccount {
+        token: token.to_string(),
+        api_token: api_token.to_string(),
+        tourist_id,
+    })
+}
+
+async fn request_tourist_account(client: &reqwest::Client) -> Result<TouristAccount> {
+    let payload = build_tourist_token_payload()?;
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static(TOURIST_USER_AGENT));
+    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/json; charset=UTF-8"),
+    );
+    headers.insert("encrypt-type", HeaderValue::from_static("1"));
+    headers.insert("cache-control", HeaderValue::from_static("no-cache"));
+    let response = client
+        .post(format!("{API_BASE}/go_v3/limoo/tourist/token"))
+        .headers(headers)
+        .json(&payload)
+        .send()
+        .await
+        .context("tourist-token request failed")?;
+    if !response.status().is_success() {
+        return Err(anyhow!("tourist-token HTTP status {}", response.status()));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .context("tourist-token endpoint returned invalid JSON")?;
+    parse_tourist_token_response(&body)
 }
 
 fn parse_account_line(line: &str, line_number: usize) -> Result<Option<Account>> {
@@ -280,6 +435,8 @@ fn parse_account_line(line: &str, line_number: usize) -> Result<Option<Account>>
     }))
 }
 
+// async def load_accounts(path: Path) -> list[Account]:
+//     ...
 async fn load_accounts(path: &PathBuf) -> Result<Vec<Account>> {
     let content = tokio::fs::read_to_string(path)
         .await
@@ -305,6 +462,8 @@ fn has_lucky_bag_logo(value: &Value) -> bool {
     value.as_i64() == Some(1) || value.as_str() == Some("1")
 }
 
+// def parse_anchor_rooms(body: Value, lucky_bags_only: bool) -> list[BagRoom]:
+//     ...
 fn parse_anchor_rooms(body: &Value, lucky_bags_only: bool) -> Vec<BagRoom> {
     let Some(items) = body.get("data").and_then(Value::as_array) else {
         return Vec::new();
@@ -340,11 +499,108 @@ fn parse_last_page(body: &Value) -> u64 {
     value_u64(&body["last_page"]).unwrap_or(1).max(1)
 }
 
+fn build_user_info_payload(user_id: u64) -> Result<Map<String, Value>> {
+    let mut payload = Map::new();
+    payload.insert("id".to_string(), json!(user_id.to_string()));
+    payload.insert("version".to_string(), json!("1.0"));
+    payload.insert("app_version".to_string(), json!(APP_VERSION));
+    payload.insert("channel_id".to_string(), json!("3"));
+    payload.insert(
+        "device_id".to_string(),
+        json!(Uuid::new_v4().simple().to_string()),
+    );
+    payload.insert("facility".to_string(), json!("1"));
+    payload.insert("lang".to_string(), json!("id"));
+    payload.insert("package_type".to_string(), json!("Android-Google"));
+    payload.insert("time".to_string(), json!(now_seconds()?.to_string()));
+    payload.insert("user_id".to_string(), json!(user_id.to_string()));
+    let signature = generate_sign(&payload);
+    payload.insert("sign".to_string(), json!(signature));
+    Ok(payload)
+}
+
+async fn resolve_live_room_id(
+    client: &reqwest::Client,
+    live_user_id: u64,
+    jwt: &str,
+    logging: bool,
+) -> Result<u64> {
+    let payload = build_user_info_payload(live_user_id)?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static(APP_VERSION));
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/json; charset=UTF-8"),
+    );
+    headers.insert("encrypt-type", HeaderValue::from_static("1"));
+    headers.insert(
+        "authorization-token",
+        HeaderValue::from_str(jwt).context("invalid JWT header value")?,
+    );
+
+    let response = client
+        .post(format!("{API_BASE}/member/info"))
+        .headers(headers)
+        .json(&payload)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        log(
+            logging,
+            "error",
+            format!(
+                "member/info for live user {} returned HTTP {}",
+                live_user_id,
+                response.status()
+            ),
+        );
+        return Err(anyhow!(
+            "member/info HTTP status {} for live user {}",
+            response.status(),
+            live_user_id
+        ));
+    }
+
+    let body: Value = response.json().await?;
+    if !is_success_code(&body) {
+        return Err(anyhow!(
+            "member/info API code {} for live user {}: {}",
+            body["code"],
+            live_user_id,
+            body["msg"]
+                .as_str()
+                .or_else(|| body["message"].as_str())
+                .unwrap_or("no message")
+        ));
+    }
+
+    let room_id = value_u64(&body["data"]["room_id"])
+        .filter(|room_id| *room_id > 0)
+        .ok_or_else(|| {
+            anyhow!(
+                "live user {} is not in an active room (member/info returned no room_id)",
+                live_user_id
+            )
+        })?;
+
+    log(
+        logging,
+        "join-debug",
+        format!("resolved live user {} to room {}", live_user_id, room_id),
+    );
+    Ok(room_id)
+}
+
 fn is_success_code(body: &Value) -> bool {
     matches!(body["code"].as_i64(), Some(0 | 200))
         || matches!(body["code"].as_str(), Some("0" | "200"))
 }
 
+// async def fetch_hot_page(client: Client, account: Account, page: int, logging: bool) -> tuple[list[BagRoom], int]:
+//     ...
 async fn fetch_hot_page(
     client: &reqwest::Client,
     account: &Account,
@@ -364,6 +620,8 @@ async fn fetch_hot_page(
     Ok((rooms, last_page))
 }
 
+// async def request_hot_page(client: Client, account: Account, page: int, logging: bool) -> tuple[Value, int]:
+//     ...
 async fn request_hot_page(
     client: &reqwest::Client,
     account: &Account,
@@ -429,6 +687,70 @@ async fn request_hot_page(
     Ok((data, last_page))
 }
 
+async fn request_hot_page_with_tourist(
+    client: &reqwest::Client,
+    account: &TouristAccount,
+    page: u64,
+    logging: bool,
+) -> Result<(Value, u64)> {
+    let payload = build_hot_anchor_payload(account.tourist_id, page)?;
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static(APP_VERSION));
+    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/json; charset=UTF-8"),
+    );
+    headers.insert("encrypt-type", HeaderValue::from_static("1"));
+    headers.insert("cache-control", HeaderValue::from_static("no-cache"));
+    headers.insert(
+        "authorization-token",
+        HeaderValue::from_str(&account.api_token)
+            .context("invalid tourist API authorization token")?,
+    );
+    let response = client
+        .post(format!("{API_BASE}/home/hot_anchor"))
+        .headers(headers)
+        .json(&payload)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .context("tourist hot-anchor request failed")?;
+    if !response.status().is_success() {
+        return Err(anyhow!(
+            "tourist hot-anchor page {page} returned HTTP {}",
+            response.status()
+        ));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .context("tourist hot-anchor endpoint returned invalid JSON")?;
+    if !is_success_code(&body) {
+        let message = body["msg"]
+            .as_str()
+            .or_else(|| body["message"].as_str())
+            .unwrap_or("no message");
+        log(
+            logging,
+            "error",
+            format!(
+                "tourist hot-anchor page {page} API code {}: {message}",
+                body["code"]
+            ),
+        );
+        return Err(anyhow!(
+            "tourist home/hot_anchor API code {}: {message}",
+            body["code"],
+        ));
+    }
+    let data = body["data"].clone();
+    let last_page = parse_last_page(&data);
+    Ok((data, last_page))
+}
+
+// async def scan_lucky_bag_rooms(client: Client, account: Account, max_pages: int, concurrency: int, logging: bool) -> list[BagRoom]:
+//     ...
 async fn scan_lucky_bag_rooms(
     client: &reqwest::Client,
     account: &Account,
@@ -489,6 +811,8 @@ async fn scan_lucky_bag_rooms(
     Ok(rooms)
 }
 
+// async def scan_hot_anchor_rooms(client: Client, account: Account, max_pages: int, concurrency: int, logging: bool) -> list[BagRoom]:
+//     ...
 async fn scan_hot_anchor_rooms(
     client: &reqwest::Client,
     account: &Account,
@@ -539,6 +863,62 @@ async fn scan_hot_anchor_rooms(
     Ok(rooms)
 }
 
+async fn scan_hot_anchor_rooms_with_tourist(
+    client: &reqwest::Client,
+    tourist: &TouristAccount,
+    max_pages: u64,
+    concurrency: usize,
+    logging: bool,
+) -> Result<Vec<BagRoom>> {
+    log(
+        logging,
+        "scan",
+        format!(
+            "starting tourist hot-anchor scan; max_pages={max_pages}, concurrency={concurrency}"
+        ),
+    );
+    let (first_page, last_page) =
+        request_hot_page_with_tourist(client, tourist, 1, logging).await?;
+    let mut rooms = parse_anchor_rooms(&first_page, false);
+    let final_page = min(last_page, max_pages.max(1));
+    if last_page > final_page {
+        log(
+            logging,
+            "warning",
+            format!("API has {last_page} pages; configured cap limits this scan to {final_page}"),
+        );
+    }
+    let mut pages =
+        stream::iter(2..=final_page)
+            .map(|page| async move {
+                request_hot_page_with_tourist(client, tourist, page, logging).await
+            })
+            .buffer_unordered(concurrency.max(1));
+    while let Some(page_result) = pages.next().await {
+        match page_result {
+            Ok((data, _)) => rooms.extend(parse_anchor_rooms(&data, false)),
+            Err(error) => log(
+                logging,
+                "error",
+                format!("tourist hot-anchor scan page failed: {error:#}"),
+            ),
+        }
+    }
+    let mut seen = HashSet::new();
+    rooms.retain(|room| seen.insert(room.room_id));
+    log(
+        logging,
+        "scan",
+        format!(
+            "tourist scan complete: {} unique hot-anchor room(s) across pages 1-{final_page}",
+            rooms.len()
+        ),
+    );
+    Ok(rooms)
+}
+
+// def room_login_payload(account: Account, room_id: int) -> Value:
+//     ...
 fn room_login_payload(account: &Account, room_id: u64) -> Result<Value> {
     let time_mill = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
     let raw = format!("{WS_SIGNING_SECRET}{time_mill}{}", account.ws_token);
@@ -566,6 +946,173 @@ fn room_login_payload(account: &Account, room_id: u64) -> Result<Value> {
     }))
 }
 
+fn tourist_room_login_payload(account: &TouristAccount, room_id: u64) -> Result<Value> {
+    let time = now_seconds()?;
+    let raw = format!("{WS_SIGNING_SECRET}{time}{}", account.token);
+    let md5_str = format!("{:x}", md5::compute(raw));
+    Ok(json!({
+        "ver": 1,
+        "op": 1001,
+        "body": {
+            "DeviceType": 1,
+            "EnterType": 0,
+            "FuncLevel": 1280,
+            "IsSmallDialog": 0,
+            "IsVoice": 0,
+            "Lang": "id",
+            "Md5Str": md5_str,
+            "RoomId": room_id,
+            "TimeMill": time,
+            "Token": account.token,
+            "Tourist": 0,
+            "UserId": 0,
+            "Version": APP_VERSION,
+            "Visitor": 1,
+            "package_type": "haigou-Android"
+        }
+    }))
+}
+
+fn parse_scout_bag_list(body: &Value) -> Vec<(u64, u64)> {
+    body["List"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|bag| {
+            let bag_id = value_u64(&bag["ID"]).filter(|id| *id > 0)?;
+            let countdown = value_u64(&bag["CountDown"])?;
+            Some((bag_id, countdown))
+        })
+        .collect()
+}
+
+fn next_due_smart_bag(
+    pending_bags: &HashMap<u64, PendingSmartBag>,
+    now: tokio::time::Instant,
+) -> Option<PendingSmartBag> {
+    pending_bags
+        .values()
+        .filter(|bag| bag.opens_at <= now + SMART_DISPATCH_LEAD)
+        .min_by_key(|bag| bag.opens_at)
+        .cloned()
+}
+
+async fn scan_room_bag_list(
+    room: &BagRoom,
+    tourist: &TouristAccount,
+    logging: bool,
+) -> Result<Vec<(u64, u64)>> {
+    let connected = tokio::time::timeout(Duration::from_secs(10), connect_async(WS_URL))
+        .await
+        .map_err(|_| anyhow!("tourist websocket connection timed out"))??;
+    let (socket, _) = connected;
+    let (mut writer, mut reader) = socket.split();
+    let login = tourist_room_login_payload(tourist, room.room_id)?;
+    writer
+        .send(Message::Text(login.to_string()))
+        .await
+        .context("failed to send tourist room-login frame")?;
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let mut joined = false;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(anyhow!(
+                "{} timed out for room {}",
+                if joined {
+                    "LuckyBag list"
+                } else {
+                    "tourist room-login acknowledgment"
+                },
+                room.room_id
+            ));
+        }
+        let incoming = tokio::time::timeout(remaining, reader.next())
+            .await
+            .map_err(|_| {
+                anyhow!(
+                    "{} timed out for room {}",
+                    if joined {
+                        "LuckyBag list"
+                    } else {
+                        "tourist room-login acknowledgment"
+                    },
+                    room.room_id
+                )
+            })?;
+        match incoming {
+            Some(Ok(Message::Text(text))) => {
+                let message: Value = serde_json::from_str(&text)
+                    .context("tourist scanner received a non-JSON text frame")?;
+                match value_u64(&message["op"]) {
+                    Some(1001) if !joined => {
+                        let body = &message["body"];
+                        let code = body["Code"].to_string();
+                        let error = body["ErrStr"].as_str().unwrap_or("");
+                        let rejected = body.get("Code").is_some()
+                            && !matches!(body["Code"].as_i64(), Some(0 | 200))
+                            && !matches!(body["Code"].as_str(), Some("0" | "200"));
+                        if rejected || !error.is_empty() {
+                            return Err(anyhow!(
+                                "tourist join rejected for room {}: code={code}, error={error}",
+                                room.room_id
+                            ));
+                        }
+                        joined = true;
+                        log(
+                            logging,
+                            "websocket",
+                            format!(
+                                "tourist joined room {} (server op=1001 code={code})",
+                                room.room_id
+                            ),
+                        );
+                        for frame in [
+                            json!({"body":{},"op":2102,"ver":1}),
+                            json!({"body":{"Type":1},"op":2004,"ver":1}),
+                            json!({"body":{"YeMa":1,"YeNum":20},"op":1005,"ver":1}),
+                            json!({"body":{},"op":1047,"ver":1}),
+                        ] {
+                            writer
+                                .send(Message::Text(frame.to_string()))
+                                .await
+                                .context("failed to send tourist room initialization frame")?;
+                        }
+                    }
+                    Some(2102) if joined => {
+                        let bags = parse_scout_bag_list(&message["body"]);
+                        log(
+                            logging,
+                            "scan",
+                            format!(
+                                "anak pramuka found {} bag(s) in room {}",
+                                bags.len(),
+                                room.room_id
+                            ),
+                        );
+                        return Ok(bags);
+                    }
+                    _ => {}
+                }
+            }
+            Some(Ok(Message::Ping(payload))) => {
+                writer.send(Message::Pong(payload)).await?;
+            }
+            Some(Ok(Message::Close(frame))) => {
+                return Err(anyhow!(
+                    "tourist scanner socket closed before LuckyBag list: {frame:?}"
+                ));
+            }
+            Some(Ok(_)) => {}
+            Some(Err(error)) => return Err(anyhow!("tourist scanner receive failed: {error}")),
+            None => return Err(anyhow!("tourist scanner socket ended before LuckyBag list")),
+        }
+    }
+}
+
+// def claim_plan(body: Value, op: int) -> tuple[int, Duration] | None:
+//     ...
 fn claim_plan(body: &Value, op: u64) -> Option<(u64, Duration)> {
     let bag_id = value_u64(&body["ID"]).filter(|bag_id| *bag_id > 0)?;
     if value_u64(&body["Status"]) == Some(1) {
@@ -582,6 +1129,8 @@ fn claim_plan(body: &Value, op: u64) -> Option<(u64, Duration)> {
     None
 }
 
+// async def claim_burst(writer: AsyncWriter, config: ClaimBurstConfig, cancelled: bool, shutdown: bool) -> None:
+//     ...
 async fn claim_burst<S>(
     writer: Arc<Mutex<S>>,
     config: ClaimBurstConfig,
@@ -643,12 +1192,15 @@ where
     Ok(())
 }
 
+// async def run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop: bool):
+//     ...
 async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop: Arc<AtomicBool>) {
     let started = tokio::time::Instant::now();
     let mut last_activity = started;
     let mut shift_end = started + config.max_shift;
     let mut reconnect_delay = Duration::from_secs(1);
     let mut connect_attempt = 0_u64;
+    let mut claim_completed = false;
     log(
         config.logging,
         "worker",
@@ -663,6 +1215,7 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
         ),
     );
     while !stop.load(Ordering::Relaxed)
+        && !claim_completed
         && tokio::time::Instant::now() < shift_end
         && last_activity.elapsed() < config.idle_timeout
     {
@@ -779,6 +1332,10 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
                                                 }
                                             }
                                         }
+                                        if config.finish_after_claim {
+                                            claim_completed = true;
+                                            break;
+                                        }
                                         continue;
                                     }
 
@@ -867,6 +1424,18 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
             }
         }
 
+        if claim_completed {
+            log(
+                config.logging,
+                "worker",
+                format!(
+                    "user {} received a LuckyBag claim result in room {}; releasing account",
+                    account.user_id, room.room_id
+                ),
+            );
+            break;
+        }
+
         if stop.load(Ordering::Relaxed)
             || tokio::time::Instant::now() >= shift_end
             || last_activity.elapsed() >= config.idle_timeout
@@ -913,6 +1482,8 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
     );
 }
 
+// async def run_room_group(room: BagRoom, accounts: deque[Account], active_rooms: set[int], worker_semaphore: Semaphore, config: WorkerConfig, workers_per_room: int, stop: bool):
+//     ...
 async fn run_room_group(
     room: BagRoom,
     accounts: Arc<Mutex<VecDeque<Account>>>,
@@ -985,6 +1556,8 @@ async fn run_room_group(
     );
 }
 
+// async def scan_only(client: Client, account: Account, args: Args, logging: bool) -> None:
+//     ...
 async fn scan_only(
     client: &reqwest::Client,
     account: &Account,
@@ -1017,6 +1590,8 @@ async fn scan_only(
     Ok(())
 }
 
+// def local_room_assignment_count(account_count: int, room_count: int, workers_per_room: int) -> int:
+//     ...
 fn local_room_assignment_count(
     account_count: usize,
     room_count: usize,
@@ -1028,6 +1603,8 @@ fn local_room_assignment_count(
     account_count.div_ceil(workers_per_room).min(room_count)
 }
 
+// async def debug_join_room(room_id: int, account: Account, logging: bool) -> None:
+//     ...
 async fn debug_join_room(room_id: u64, account: &Account, logging: bool) -> Result<()> {
     log(
         logging,
@@ -1050,71 +1627,80 @@ async fn debug_join_room(room_id: u64, account: &Account, logging: bool) -> Resu
     log(
         logging,
         "join-debug",
-        "room-login frame sent; waiting up to 12s for server response",
+        "room-login frame sent; waiting for server acceptance",
     );
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(12);
+    let mut joined = false;
+    let mut shutdown_signal = Box::pin(tokio::signal::ctrl_c());
+    let mut deadline = tokio::time::Instant::now() + Duration::from_secs(12);
+
     loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            log(
-                logging,
-                "join-debug",
-                format!("no room-login response received for room {room_id} within 12s"),
-            );
-            return Err(anyhow!("no room-login response received within 12 seconds"));
-        }
+        tokio::select! {
+            _ = shutdown_signal.as_mut() => {
+                log(logging, "shutdown", "Ctrl+C received; closing join socket");
+                let _ = writer.send(Message::Close(None)).await;
+                return Ok(());
+            }
+            incoming = reader.next() => {
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                if remaining.is_zero() && !joined {
+                    log(logging, "join-debug", format!("no room-login response received for room {room_id} within 12s"));
+                    return Err(anyhow!("no room-login response received within 12 seconds"));
+                }
 
-        let incoming = tokio::time::timeout(remaining, reader.next())
-            .await
-            .map_err(|_| anyhow!("no room-login response received within 12 seconds"))?;
-        match incoming {
-            Some(Ok(Message::Text(text))) => {
-                let message: Value = serde_json::from_str(&text)
-                    .context("server sent a non-JSON text frame during join test")?;
-                let op = value_u64(&message["op"]).unwrap_or(0);
-                let body = &message["body"];
-                let code = body["Code"].to_string();
-                let error = body["ErrStr"].as_str().unwrap_or("");
-                log(
-                    logging,
-                    "join-debug",
-                    format!("server frame op={op} code={code} error={error:?}"),
-                );
+                match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        let message: Value = serde_json::from_str(&text)
+                            .context("server sent a non-JSON text frame during join test")?;
+                        let op = value_u64(&message["op"]).unwrap_or(0);
+                        let body = &message["body"];
+                        let code = body["Code"].to_string();
+                        let error = body["ErrStr"].as_str().unwrap_or("");
+                        log(
+                            logging,
+                            "join-debug",
+                            format!("server frame op={op} code={code} error={error:?}"),
+                        );
 
-                if op == 1001 {
-                    let rejected = body.get("Code").is_some()
-                        && !matches!(body["Code"].as_i64(), Some(0 | 200))
-                        && !matches!(body["Code"].as_str(), Some("0" | "200"));
-                    if rejected || !error.is_empty() {
-                        return Err(anyhow!(
-                            "server returned a room-login rejection: code={code}, error={error}"
-                        ));
+                        if op == 1001 {
+                            let rejected = body.get("Code").is_some()
+                                && !matches!(body["Code"].as_i64(), Some(0 | 200))
+                                && !matches!(body["Code"].as_str(), Some("0" | "200"));
+                            if rejected || !error.is_empty() {
+                                return Err(anyhow!(
+                                    "server returned a room-login rejection: code={code}, error={error}"
+                                ));
+                            }
+                            joined = true;
+                            deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+                            log(
+                                logging,
+                                "join-debug",
+                                format!("server replied with op 1001 for room {room_id}; join accepted; staying connected until Ctrl+C"),
+                            );
+                        }
                     }
-                    log(
-                        logging,
-                        "join-debug",
-                        format!("server replied with op 1001 for room {room_id}; join accepted"),
-                    );
-                    let _ = writer.send(Message::Close(None)).await;
-                    return Ok(());
+                    Some(Ok(Message::Ping(payload))) => {
+                        writer.send(Message::Pong(payload)).await?;
+                    }
+                    Some(Ok(Message::Close(frame))) => {
+                        log(logging, "join-debug", format!("server closed the socket while staying connected: {frame:?}"));
+                        return Ok(());
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(error)) => return Err(anyhow!("websocket receive failed: {error}")),
+                    None => return Err(anyhow!("websocket ended before join ACK")),
+                }
+                if joined {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
                 }
             }
-            Some(Ok(Message::Ping(payload))) => {
-                writer.send(Message::Pong(payload)).await?;
-            }
-            Some(Ok(Message::Close(frame))) => {
-                return Err(anyhow!(
-                    "server closed the socket before join ACK: {frame:?}"
-                ));
-            }
-            Some(Ok(_)) => {}
-            Some(Err(error)) => return Err(anyhow!("websocket receive failed: {error}")),
-            None => return Err(anyhow!("websocket ended before join ACK")),
         }
     }
 }
 
+// async def run_local_luckybag(client: Client, accounts: list[Account], scan_account: Account, args: Args, logging: bool) -> None:
+//     ...
 async fn run_local_luckybag(
     client: &reqwest::Client,
     accounts: &[Account],
@@ -1143,6 +1729,7 @@ async fn run_local_luckybag(
         max_shift: refresh,
         claim_attempts: args.local_claim_attempts,
         claim_delay: Duration::from_millis(args.local_claim_delay_ms),
+        finish_after_claim: false,
         logging,
     };
     let mut cycle = 0_u64;
@@ -1268,9 +1855,216 @@ async fn run_local_luckybag(
     Ok(())
 }
 
+async fn dispatch_due_smart_bag(
+    pending_bags: &mut HashMap<u64, PendingSmartBag>,
+    dispatched_bags: &mut HashMap<u64, tokio::time::Instant>,
+    worker_pool: &SmartWorkerPool,
+    active_group: &mut JoinSet<()>,
+) {
+    if !active_group.is_empty() || worker_pool.stop.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(bag) = next_due_smart_bag(pending_bags, tokio::time::Instant::now()) else {
+        return;
+    };
+    if worker_pool.accounts.lock().await.is_empty() {
+        return;
+    }
+
+    pending_bags.remove(&bag.bag_id);
+    dispatched_bags.insert(bag.bag_id, tokio::time::Instant::now());
+    log(
+        worker_pool.worker_config.logging,
+        "dispatch",
+        format!(
+            "dispatching up to {} worker(s) to room {} for bag {} (opens in {}s)",
+            worker_pool.workers_per_room,
+            bag.room.room_id,
+            bag.bag_id,
+            bag.opens_at
+                .saturating_duration_since(tokio::time::Instant::now())
+                .as_secs()
+        ),
+    );
+    active_group.spawn(run_room_group(
+        bag.room,
+        worker_pool.accounts.clone(),
+        worker_pool.active_rooms.clone(),
+        worker_pool.worker_semaphore.clone(),
+        worker_pool.worker_config.clone(),
+        worker_pool.workers_per_room,
+        worker_pool.stop.clone(),
+    ));
+}
+
+async fn run_smart_luckybag(
+    client: &reqwest::Client,
+    accounts: &[Account],
+    tourist: &TouristAccount,
+    args: &Args,
+    logging: bool,
+) -> Result<()> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let signal_stop = stop.clone();
+    tokio::spawn(async move {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            log(
+                true,
+                "error",
+                format!("failed to listen for Ctrl-C: {error}"),
+            );
+        } else {
+            log(true, "shutdown", "shutdown requested");
+            signal_stop.store(true, Ordering::Relaxed);
+        }
+    });
+
+    let assigned_accounts = accounts
+        .iter()
+        .take(args.max_workers)
+        .cloned()
+        .collect::<Vec<_>>();
+    let account_queue = Arc::new(Mutex::new(VecDeque::from(assigned_accounts)));
+    let worker_config = WorkerConfig {
+        idle_timeout: Duration::from_secs(20),
+        max_shift: Duration::from_secs(30),
+        claim_attempts: args.claim_attempts,
+        claim_delay: Duration::from_millis(args.claim_delay_ms),
+        finish_after_claim: true,
+        logging,
+    };
+    let worker_pool = SmartWorkerPool {
+        accounts: account_queue.clone(),
+        active_rooms: Arc::new(Mutex::new(HashSet::new())),
+        worker_semaphore: Arc::new(Semaphore::new(args.max_workers)),
+        worker_config,
+        workers_per_room: args.max_workers,
+        stop: stop.clone(),
+    };
+    let mut pending_bags = HashMap::<u64, PendingSmartBag>::new();
+    let mut dispatched_bags = HashMap::<u64, tokio::time::Instant>::new();
+    let mut active_group = JoinSet::new();
+    log(
+        logging,
+        "local",
+        format!(
+            "smart LuckyBag scout started with an API-issued tourist token; {} worker account(s) available, dispatch lead=5s",
+            account_queue.lock().await.len()
+        ),
+    );
+
+    while !stop.load(Ordering::Relaxed) {
+        while active_group.try_join_next().is_some() {}
+        dispatched_bags
+            .retain(|_, dispatched_at| dispatched_at.elapsed() < Duration::from_secs(600));
+        pending_bags.retain(|bag_id, bag| {
+            !dispatched_bags.contains_key(bag_id)
+                && bag.opens_at + Duration::from_secs(20) > tokio::time::Instant::now()
+        });
+
+        match scan_hot_anchor_rooms_with_tourist(
+            client,
+            tourist,
+            args.max_pages,
+            args.scan_concurrency,
+            logging,
+        )
+        .await
+        {
+            Ok(rooms) => {
+                if rooms.is_empty() {
+                    log(
+                        logging,
+                        "warning",
+                        "hot-anchor scan returned no rooms for tourist scouting",
+                    );
+                }
+                for room in rooms {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    match scan_room_bag_list(&room, tourist, logging).await {
+                        Ok(bags) => {
+                            let observed_at = tokio::time::Instant::now();
+                            for (bag_id, countdown) in bags {
+                                if !dispatched_bags.contains_key(&bag_id) {
+                                    pending_bags.insert(
+                                        bag_id,
+                                        PendingSmartBag {
+                                            bag_id,
+                                            room: room.clone(),
+                                            opens_at: observed_at + Duration::from_secs(countdown),
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                        Err(error) => log(
+                            logging,
+                            "warning",
+                            format!("tourist scan failed for room {}: {error:#}", room.room_id),
+                        ),
+                    }
+
+                    while active_group.try_join_next().is_some() {}
+                    dispatch_due_smart_bag(
+                        &mut pending_bags,
+                        &mut dispatched_bags,
+                        &worker_pool,
+                        &mut active_group,
+                    )
+                    .await;
+                }
+            }
+            Err(error) => log(
+                logging,
+                "error",
+                format!("smart LuckyBag hot-anchor scan failed: {error:#}"),
+            ),
+        }
+
+        while active_group.try_join_next().is_some() {}
+        dispatch_due_smart_bag(
+            &mut pending_bags,
+            &mut dispatched_bags,
+            &worker_pool,
+            &mut active_group,
+        )
+        .await;
+
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_millis(args.scan_interval_ms)) => {},
+            _ = async {
+                while !stop.load(Ordering::Relaxed) {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            } => {},
+        }
+    }
+
+    stop.store(true, Ordering::Relaxed);
+    while let Some(result) = active_group.join_next().await {
+        if let Err(error) = result {
+            log(
+                logging,
+                "error",
+                format!("smart LuckyBag worker group failed: {error}"),
+            );
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
+// async def main() -> None:
+//     ...
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if args.smart_luckybag && (args.local_luckybag || args.scan_only || args.join.is_some()) {
+        return Err(anyhow!(
+            "--smart-luckybag cannot be combined with --local-luckybag, --scan-only, or --join"
+        ));
+    }
     if args.max_workers == 0 || args.workers_per_room == 0 {
         return Err(anyhow!("max-workers and workers-per-room must be positive"));
     }
@@ -1318,16 +2112,28 @@ async fn main() -> Result<()> {
             account_path.display()
         ));
     }
-    if args.scan_account_index >= loaded.len() {
-        return Err(anyhow!(
-            "scan-account-index is outside the loaded account list"
-        ));
-    }
     log(
         logging,
         "startup",
         format!("loaded {} account(s)", loaded.len()),
     );
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
+
+    if args.smart_luckybag {
+        let tourist = request_tourist_account(&client)
+            .await
+            .context("failed to obtain API-issued tourist token")?;
+        log(logging, "local", "obtained API-issued tourist token");
+        return run_smart_luckybag(&client, &loaded, &tourist, &args, logging).await;
+    }
+
+    if args.scan_account_index >= loaded.len() {
+        return Err(anyhow!(
+            "scan-account-index is outside the loaded account list"
+        ));
+    }
     let scan_account = loaded[args.scan_account_index].clone();
     log(
         logging,
@@ -1337,11 +2143,10 @@ async fn main() -> Result<()> {
             scan_account.user_id, args.scan_account_index
         ),
     );
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()?;
 
-    if let Some(room_id) = args.join {
+    if let Some(live_user_id) = args.join {
+        let room_id =
+            resolve_live_room_id(&client, live_user_id, &scan_account.jwt, logging).await?;
         return debug_join_room(room_id, &scan_account, logging).await;
     }
 
@@ -1375,6 +2180,7 @@ async fn main() -> Result<()> {
         max_shift: Duration::from_secs(args.max_shift_secs),
         claim_attempts: args.claim_attempts,
         claim_delay: Duration::from_millis(args.claim_delay_ms),
+        finish_after_claim: false,
         logging,
     };
     let room_capacity = (args.max_workers / args.workers_per_room).max(1);
@@ -1454,7 +2260,14 @@ async fn main() -> Result<()> {
             ),
         }
 
-        tokio::time::sleep(Duration::from_millis(args.scan_interval_ms)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_millis(args.scan_interval_ms)) => {},
+            _ = async {
+                while !stop.load(Ordering::Relaxed) {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            } => {},
+        }
     }
 
     while let Some(result) = room_tasks.join_next().await {
@@ -1579,6 +2392,116 @@ mod tests {
         assert_eq!(payload["body"]["RoomId"], 456);
         assert_eq!(payload["body"]["Md5Str"], expected);
         assert!(time_mill > 1_000_000_000_000);
+    }
+
+    #[test]
+    fn tourist_join_payload_matches_satgas_visitor_shape() {
+        let account = TouristAccount {
+            token: "tourist-token".to_string(),
+            api_token: "api-token".to_string(),
+            tourist_id: 77777,
+        };
+        let payload = tourist_room_login_payload(&account, 456).unwrap();
+        let timestamp = value_u64(&payload["body"]["TimeMill"]).unwrap();
+        let raw = format!("{WS_SIGNING_SECRET}{timestamp}{}", account.token);
+        assert_eq!(payload["op"], 1001);
+        assert_eq!(payload["body"]["RoomId"], 456);
+        assert_eq!(payload["body"]["UserId"], 0);
+        assert_eq!(payload["body"]["Visitor"], 1);
+        assert_eq!(
+            payload["body"]["Md5Str"],
+            format!("{:x}", md5::compute(raw))
+        );
+        assert!(timestamp < 1_000_000_000_000);
+    }
+
+    #[test]
+    fn tourist_bag_list_parser_reads_numeric_and_string_fields() {
+        let bags = parse_scout_bag_list(&json!({
+            "List": [
+                {"ID": 12, "CountDown": 8},
+                {"ID": "13", "CountDown": "3"},
+                {"ID": 0, "CountDown": 1},
+                {"ID": 14}
+            ]
+        }));
+        assert_eq!(bags, vec![(12, 8), (13, 3)]);
+    }
+
+    #[test]
+    fn tourist_token_parser_accepts_ws_and_api_tokens() {
+        let account = parse_tourist_token_response(&json!({
+            "code": 0,
+            "data": {
+                "token": "websocket-token",
+                "jwt_token": "api-token",
+                "tourist_id": "77777"
+            }
+        }))
+        .unwrap();
+        assert_eq!(account.token, "websocket-token");
+        assert_eq!(account.api_token, "api-token");
+        assert_eq!(account.tourist_id, 77777);
+    }
+
+    #[test]
+    fn tourist_token_parser_requires_jwt_for_api_requests() {
+        let account = parse_tourist_token_response(&json!({
+            "code": "200",
+            "data": {"token": "single-token", "tourist_id": 42}
+        }));
+        assert!(account.is_err());
+    }
+
+    #[test]
+    fn tourist_token_payload_matches_turis_request() {
+        let payload = build_tourist_token_payload().unwrap();
+        assert_eq!(payload["type"], 0);
+        assert_eq!(payload["app_version"], TOURIST_API_VERSION);
+        assert_eq!(payload["user_id"], "0");
+        assert_eq!(payload["package_type"], "Android-Google");
+        assert_eq!(payload["sign"], generate_sign(&payload));
+    }
+
+    #[test]
+    fn tourist_hot_anchor_payload_uses_returned_tourist_id() {
+        let account = parse_tourist_token_response(&json!({
+            "code": 0,
+            "data": {
+                "token": "websocket-token",
+                "jwt_token": "api-token",
+                "tourist_id": 77777
+            }
+        }))
+        .unwrap();
+        let payload = build_hot_anchor_payload(account.tourist_id, 1).unwrap();
+        assert_eq!(payload["user_id"], 77777);
+        assert_eq!(payload["page"], 1);
+        assert_eq!(payload["sign"], generate_sign(&payload));
+    }
+
+    #[test]
+    fn smart_queue_picks_earliest_bag_only_when_within_lead_window() {
+        let now = tokio::time::Instant::now();
+        let room = BagRoom {
+            room_id: 1,
+            anchor_id: 2,
+            nickname: "anchor".to_string(),
+        };
+        let mut pending = HashMap::new();
+        for (bag_id, seconds) in [(1, 12), (2, 4), (3, 2)] {
+            pending.insert(
+                bag_id,
+                PendingSmartBag {
+                    bag_id,
+                    room: room.clone(),
+                    opens_at: now + Duration::from_secs(seconds),
+                },
+            );
+        }
+        let selected = next_due_smart_bag(&pending, now).unwrap();
+        assert_eq!(selected.bag_id, 3);
+        assert_eq!(selected.room.room_id, 1);
     }
 
     #[test]
