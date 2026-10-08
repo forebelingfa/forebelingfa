@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import random
+import sys
 import tempfile
 import time
 from typing import Any, Dict, List, Optional
@@ -409,9 +410,10 @@ def generate_accounts_file_from_tamil(
     tamil_file: str | Path = "tamil.txt",
     output_file: str | Path = "accounts.txt",
 ) -> int:
-    """Log in ``jwt,deviceId,password`` rows and write ``userId,ws_token,jwt``."""
+    """Log in source rows and write successful ``userId,ws_token,jwt`` rows."""
     source = Path(tamil_file)
     account_lines = []
+    failed_logins = 0
 
     for line_number, raw_line in enumerate(
         source.read_text(encoding="utf-8").splitlines(), start=1
@@ -444,14 +446,29 @@ def generate_accounts_file_from_tamil(
                 f"Invalid user ID in JWT in {source} at line {line_number}"
             ) from exc
 
-        account_lines.append(
-            _login_account_row(user_id, password, source, line_number)
-        )
+        try:
+            account_lines.append(
+                _login_account_row(user_id, password, source, line_number)
+            )
+        except RuntimeError as exc:
+            failed_logins += 1
+            print(f"Skipping failed login: {exc}", file=sys.stderr)
 
     if not account_lines:
+        if failed_logins:
+            raise RuntimeError(
+                f"Could not generate any accounts from {source}; "
+                f"{failed_logins} login(s) failed. Output was not modified."
+            )
         raise ValueError(f"No credentials found in {source}")
 
     _write_lines_atomically(output_file, account_lines)
+    if failed_logins:
+        print(
+            f"Skipped {failed_logins} row(s) whose login failed; "
+            "the output contains only successful logins.",
+            file=sys.stderr,
+        )
     return len(account_lines)
 
 

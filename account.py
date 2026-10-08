@@ -156,7 +156,15 @@ def drain_consents(d, max_iters=8, delay=0.6):
                 break
 
         if consent_button is not None:
-            consent_button.click()
+            if selector.get("text", "").casefold() == "saya mengerti":
+                _, height = d.window_size()
+                bounds = consent_button.info["bounds"]
+                # Google reports this button above its actual rendered position.
+                x = (bounds["left"] + bounds["right"]) // 2
+                y = round(height * 0.888)
+                d.shell(f"input tap {x} {y}")
+            else:
+                consent_button.click()
             actions += 1
             deadline = time.monotonic() + 15
             while consent_button.exists(timeout=0.2):
