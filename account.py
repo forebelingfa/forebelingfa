@@ -653,9 +653,9 @@ def run_confirm_bind(ticket, email, otp, token):
 
 if __name__ == "__main__":
 
-    d_serial = "266c3127"
-    # d_serial = "27959bfa7cf4"
-    TIMEOUT = 40
+    # d_serial = "266c3127"
+    d_serial = "27959bfa7cf4"
+    TIMEOUT = 60
     MAX_TAMIL_ACCOUNTS_PER_GOOGLE = 5
     d = u2.connect(serial=d_serial)  # auto-detect USB
     d.screen_on()
@@ -664,12 +664,12 @@ if __name__ == "__main__":
     login_google_account = 1
     # Define a maximum number of retries to prevent infinite loops
     MAX_VERIFICATION_RETRIES = 6
-    sf7=4
+    sf7=14
     for mail_num_idx in range(56):
         
 
         
-        EMAIL = f"pyf{sf7+mail_num_idx}@gosmail.xyz"
+        EMAIL = f"adv{sf7+mail_num_idx}@gosmail.xyz"
         PASSWORD = "qwertyui"
 
         # --- Start of the loop to ensure the account is present ---
@@ -728,7 +728,7 @@ if __name__ == "__main__":
                         if not register_tamil_account(auth_tokens, EMAIL_DOMAIN):
                             with open("skipped.txt", "a") as skip:
                                 skip.write(f"{EMAIL},{account_index + 1}\n")
-                            break
+                            pass
                         completed_registrations += 1
                     finally:
                         gc.collect()
@@ -752,3 +752,4 @@ if __name__ == "__main__":
                 "Tamil registrations succeeded. Stopping the batch."
             )
             break
+        # adb shell pm clear com.google.android.gms

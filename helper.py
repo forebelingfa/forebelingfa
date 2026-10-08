@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 from concurrent.futures import ThreadPoolExecutor
+import getpass
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,8 @@ import tempfile
 import time
 from typing import Any, Dict, List, Optional
 
+import requests
+
 from api import (
     TamilAPIError,
     clone_user_profile,
@@ -26,6 +29,7 @@ from api import (
     get_user_info,
     login_tamil,
 )
+from binding import set_password as set_tamil_password
 from simple_account_manager import load_accounts
 
 
@@ -527,6 +531,65 @@ def mass_clone_profiles(
     return results
 
 
+def change_password_for_accounts(
+    accounts_file: str | Path,
+    new_password: str,
+) -> List[Dict[str, Any]]:
+    """Set one password per account and save successful userId,password pairs."""
+    if not new_password:
+        raise ValueError("The new password must not be empty")
+    if "\n" in new_password or "\r" in new_password:
+        raise ValueError("The new password cannot contain a newline")
+
+    source = Path(accounts_file)
+    accounts = load_accounts(source)
+    results: List[Dict[str, Any]] = []
+    for account in accounts:
+        user_id = int(account["user_id"])
+        try:
+            status_code, response = set_tamil_password(
+                token=account["jwt"],
+                password=new_password,
+            )
+        except requests.RequestException as exc:
+            results.append({
+                "user_id": user_id,
+                "success": False,
+                "error": f"request failed: {exc}",
+            })
+            continue
+
+        success = (
+            status_code < 400
+            and isinstance(response, dict)
+            and str(response.get("code")) in {"0", "200"}
+        )
+        results.append({
+            "user_id": user_id,
+            "success": success,
+            "error": None if success else (
+                f"HTTP {status_code}, API code "
+                f"{response.get('code', 'missing') if isinstance(response, dict) else 'invalid response'}"
+            ),
+        })
+
+    successful_user_ids = {
+        result["user_id"] for result in results if result["success"]
+    }
+    if successful_user_ids:
+        password_file = source.with_name(f"{source.stem}_password.txt")
+        _write_lines_atomically(
+            password_file,
+            [
+                f"{account['user_id']},{new_password}"
+                for account in accounts
+                if account["user_id"] in successful_user_ids
+            ],
+        )
+
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tamil account helper utilities")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -551,6 +614,17 @@ def main() -> None:
     )
     clone_parser.add_argument("accounts", help="Target accounts: user_id,ws_token,jwt rows")
     clone_parser.add_argument("source_user_ids", help="Text file with one source user ID per line")
+
+    password_parser = commands.add_parser(
+        "change-password",
+        help="Set one securely prompted password for every account in an account token file",
+    )
+    password_parser.add_argument(
+        "accounts",
+        nargs="?",
+        default="accounts.txt",
+        help="Account file in userId,ws_token,jwt format (default: accounts.txt)",
+    )
 
     status_parser = commands.add_parser("inspect-accounts", help="Inspect JWT claims and profile lookup separately")
     status_parser.add_argument("accounts")
@@ -599,6 +673,27 @@ def main() -> None:
         for result in results:
             print(json.dumps(result, ensure_ascii=False))
         print(f"Processed {len(results)} target accounts")
+    elif args.command == "change-password":
+        new_password = getpass.getpass("New password for all accounts: ")
+        if not new_password:
+            parser.error("The new password must not be empty")
+        confirmation = getpass.getpass("Confirm new password: ")
+        if new_password != confirmation:
+            parser.error("Passwords do not match")
+        results = change_password_for_accounts(args.accounts, new_password)
+        succeeded = sum(result["success"] for result in results)
+        for result in results:
+            outcome = "updated" if result["success"] else result["error"]
+            print(f"{result['user_id']}: {outcome}")
+        print(
+            f"Password update completed for {succeeded}/{len(results)} accounts"
+        )
+        if succeeded:
+            source = Path(args.accounts)
+            password_file = source.with_name(f"{source.stem}_password.txt")
+            print(f"Saved updated user IDs and passwords to {password_file}")
+        if succeeded != len(results):
+            raise SystemExit(1)
     elif args.command == "inspect-accounts":
         inspect_account_file_concurrent(
             args.accounts,
