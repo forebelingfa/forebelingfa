@@ -7,6 +7,7 @@ import gc
 
 from binding import binding, ini_set_password, unbind
 from get_jwt import SPAWN_TIMEOUT, main as jw
+from mailisa import EMAIL_DOMAIN
 
 APP_PACKAGE = "com.limoolive.stream"
 
@@ -137,7 +138,8 @@ def drain_consents(d, max_iters=8, delay=0.6):
     consent_buttons = [
         {"text": "Saya mengerti"},
         {"text": "SAYA MENGERTI"},
-        {"resourceId": "signinconsentNext"},
+        {"resourceId": "com.google.android.gms:id/signinconsentNext"},
+        {"resourceId": "com.google.android.gms:id/agree_and_share_button"},
         {"text": "Saya setuju"},
         {"text": "Setuju dan bagikan"},
     ]
@@ -313,11 +315,11 @@ def open_tamil(timeout: int = 30):
         time.sleep(2)
         if login_with_google_in_tamil(d, timeout=timeout):
             accept_google_consent_in_tamil(d, timeout=timeout)
-            consent_actions = drain_consents(d)
-            print("Google consent actions:", consent_actions)
             if not pick_google_account(d, EMAIL, timeout=timeout):
                 print(f"❌ Google account picker did not offer {EMAIL}")
                 return {}
+            consent_actions = drain_consents(d)
+            print("Google consent actions:", consent_actions)
         else:
             return {}
 
@@ -619,9 +621,8 @@ if __name__ == "__main__":
 
     d_serial = "266c3127"
     # d_serial = "27959bfa7cf4"
-    TIMEOUT = 35
+    TIMEOUT = 40
     MAX_TAMIL_ACCOUNTS_PER_GOOGLE = 5
-    EMAIL_DOMAIN = "ini.wtf"
     d = u2.connect(serial=d_serial)  # auto-detect USB
     d.screen_on()
 
@@ -629,7 +630,7 @@ if __name__ == "__main__":
     login_google_account = 1
     # Define a maximum number of retries to prevent infinite loops
     MAX_VERIFICATION_RETRIES = 6
-    sf7=1
+    sf7=3
     for mail_num_idx in range(56):
         
 
@@ -675,6 +676,7 @@ if __name__ == "__main__":
         # --- End of the account verification loop ---
 
         # The rest of your original code, which now *assumes* the account is definitely there
+        completed_registrations = 0
         try:
             if create_tamil_account:
                 for account_index in range(MAX_TAMIL_ACCOUNTS_PER_GOOGLE):
@@ -684,21 +686,35 @@ if __name__ == "__main__":
                     )
                     try:
                         auth_tokens = open_tamil(timeout=TIMEOUT)
+                        if isinstance(auth_tokens, dict) and auth_tokens.get("jwt"):
+                            if not clear_app_data(d):
+                                raise RuntimeError(
+                                    "Could not stop Tamil after capturing its JWT"
+                                )
                         if not register_tamil_account(auth_tokens, EMAIL_DOMAIN):
                             with open("skipped.txt", "a") as skip:
                                 skip.write(f"{EMAIL},{account_index + 1}\n")
                             break
+                        completed_registrations += 1
                     finally:
-                        clear_app_data(d)
                         gc.collect()
-
-                print("Otw hapus data.. [enter]")
-                d.set_orientation("n")
-                # clear_app_data(d)
-
-                # subprocess.call(["./duku", EMAIL, PASSWORD],)
-
-                d.set_orientation("n")
-                remove_account(d, EMAIL)  # Remove the Google account after Tamil app operations
         except Exception as e:
-            print(e)  # Catch exceptions from the `create_tamil_account` block
+            print(f"Registration batch stopped for {EMAIL}: {e}")
+
+        if (
+            create_tamil_account
+            and completed_registrations == MAX_TAMIL_ACCOUNTS_PER_GOOGLE
+        ):
+            d.set_orientation("n")
+            remove_account(d, EMAIL)
+
+        if (
+            create_tamil_account
+            and completed_registrations < MAX_TAMIL_ACCOUNTS_PER_GOOGLE
+        ):
+            print(
+                f"Keeping Google account {EMAIL} on the device: only "
+                f"{completed_registrations}/{MAX_TAMIL_ACCOUNTS_PER_GOOGLE} "
+                "Tamil registrations succeeded. Stopping the batch."
+            )
+            break

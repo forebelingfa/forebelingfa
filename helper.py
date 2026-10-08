@@ -319,6 +319,48 @@ def merge_account_files(input_paths: List[str], output_path: str) -> int:
     return len(output_lines)
 
 
+def _login_account_row(
+    user_id: int,
+    password: str,
+    source: Path,
+    line_number: int,
+) -> str:
+    try:
+        response = login_tamil(user_id, password)
+    except TamilAPIError as exc:
+        raise RuntimeError(
+            f"Login failed for user {user_id} at line {line_number} in {source}: {exc}"
+        ) from exc
+
+    if str(response.get("code")) not in {"0", "200"}:
+        message = response.get("msg") or response.get("message") or "no error message"
+        raise RuntimeError(
+            f"Login failed for user {user_id} at line {line_number} in {source}: "
+            f"API code={response.get('code', 'missing')}: {message}"
+        )
+
+    data = response.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"Login response for user {user_id} at line {line_number} "
+            "did not contain account data"
+        )
+    ws_token = data.get("token")
+    jwt = data.get("jwt_authorization_token")
+    if not isinstance(ws_token, str) or not ws_token:
+        raise RuntimeError(
+            f"Login response for user {user_id} did not contain a websocket token"
+        )
+    if not isinstance(jwt, str) or not jwt:
+        raise RuntimeError(f"Login response for user {user_id} did not contain a JWT")
+    if "," in ws_token or "," in jwt:
+        raise RuntimeError(
+            f"Login response for user {user_id} contains a comma in a token"
+        )
+
+    return f"{user_id},{ws_token},{jwt}"
+
+
 def generate_accounts_file(
     credentials_file: str | Path,
     output_file: str | Path = "accounts.txt",
@@ -345,38 +387,59 @@ def generate_accounts_file(
                 f"Invalid user ID in {source} at line {line_number}"
             ) from exc
 
+        account_lines.append(
+            _login_account_row(user_id, password.strip(), source, line_number)
+        )
+
+    if not account_lines:
+        raise ValueError(f"No credentials found in {source}")
+
+    _write_lines_atomically(output_file, account_lines)
+    return len(account_lines)
+
+
+def generate_accounts_file_from_tamil(
+    tamil_file: str | Path = "tamil.txt",
+    output_file: str | Path = "accounts.txt",
+) -> int:
+    """Log in ``jwt,deviceId,password`` rows and write ``userId,ws_token,jwt``."""
+    source = Path(tamil_file)
+    account_lines = []
+
+    for line_number, raw_line in enumerate(
+        source.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 3 or not all(parts):
+            raise ValueError(
+                f"Invalid record in {source} at line {line_number}: "
+                "expected 'jwt,deviceId,password'"
+            )
+
+        jwt, device_id, password = parts
+        if not device_id:
+            raise ValueError(
+                f"Invalid record in {source} at line {line_number}: deviceId is empty"
+            )
+        user_id_raw = decode_jwt_userid(jwt)
+        if user_id_raw is None:
+            raise ValueError(
+                f"Could not read user ID from JWT in {source} at line {line_number}"
+            )
         try:
-            response = login_tamil(user_id, password.strip())
-        except TamilAPIError as exc:
-            raise RuntimeError(
-                f"Login failed for user {user_id} at line {line_number}: {exc}"
+            user_id = int(user_id_raw)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid user ID in JWT in {source} at line {line_number}"
             ) from exc
 
-        if str(response.get("code")) not in {"0", "200"}:
-            message = response.get("msg") or response.get("message") or "no error message"
-            raise RuntimeError(
-                f"Login failed for user {user_id} at line {line_number}: "
-                f"API code={response.get('code', 'missing')}: {message}"
-            )
-
-        data = response.get("data")
-        if not isinstance(data, dict):
-            raise RuntimeError(
-                f"Login response for user {user_id} at line {line_number} "
-                "did not contain account data"
-            )
-        ws_token = data.get("token")
-        jwt = data.get("jwt_authorization_token")
-        if not isinstance(ws_token, str) or not ws_token:
-            raise RuntimeError(f"Login response for user {user_id} did not contain a websocket token")
-        if not isinstance(jwt, str) or not jwt:
-            raise RuntimeError(f"Login response for user {user_id} did not contain a JWT")
-        if "," in ws_token or "," in jwt:
-            raise RuntimeError(
-                f"Login response for user {user_id} contains a comma in a token"
-            )
-
-        account_lines.append(f"{user_id},{ws_token},{jwt}")
+        account_lines.append(
+            _login_account_row(user_id, password, source, line_number)
+        )
 
     if not account_lines:
         raise ValueError(f"No credentials found in {source}")
@@ -395,6 +458,13 @@ def main() -> None:
     )
     credentials_parser.add_argument("credentials", help="Input file with userId,password lines")
     credentials_parser.add_argument("--output", default="accounts.txt")
+
+    tamil_parser = commands.add_parser(
+        "generate-from-tamil",
+        help="Log in jwt,deviceId,password rows from tamil.txt and write accounts.txt",
+    )
+    tamil_parser.add_argument("tamil_file", nargs="?", default="tamil.txt")
+    tamil_parser.add_argument("--output", default="accounts.txt")
 
     status_parser = commands.add_parser("inspect-accounts", help="Inspect JWT claims and profile lookup separately")
     status_parser.add_argument("accounts")
@@ -434,6 +504,9 @@ def main() -> None:
 
     if args.command == "generate-accounts":
         count = generate_accounts_file(args.credentials, args.output)
+        print(f"Wrote credentials for {count} accounts to {args.output}")
+    elif args.command == "generate-from-tamil":
+        count = generate_accounts_file_from_tamil(args.tamil_file, args.output)
         print(f"Wrote credentials for {count} accounts to {args.output}")
     elif args.command == "inspect-accounts":
         inspect_account_file_concurrent(

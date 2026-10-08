@@ -4,7 +4,7 @@ import binascii
 import requests, random, os, sys, uuid
 
 # from mel import wait_for_new_otp, wait_for_new_otp_for_target
-from mailisa import wait_for_new_otp_for_target
+from mailisa import EMAIL_DOMAIN, wait_for_new_otp_for_target
 from api import API_BASE, generate_sign_from_payload
 
 PATH_SEND = "go_v3/limoo/send_email_code"
@@ -211,6 +211,7 @@ def unbind_account(
         payload["user_id"] = user_id
 
     payload["sign"] = generate_sign_from_payload(payload)
+    print(payload)
     return _post(PATH_UNBIND, payload, token)
 
 
@@ -225,7 +226,7 @@ def binding(email: str, token: str, otp_code: str):
 
         otp_code = wait_for_new_otp_for_target(
             target_receiver=email,
-            timeout=30,
+            timeout=120,
         )
         if otp_code is None:
             print("❌ Timed out waiting for Tamil email verification code")
@@ -257,13 +258,13 @@ def unbind(email: str, token: str, otp: str):
     if not otp:
         print("Otw unbinding.. ")
         print(">>> Sending email code for unbinding...")
-        status, resp = send_email_code(email, token, 2)
+        status, resp = send_email_code(email, token, 3)
         print(status, resp)
         if not _is_success(resp):
             return False
         otp = wait_for_new_otp_for_target(
             target_receiver=email,
-            timeout=30,
+            timeout=120,
         )
         if otp is None:
             print("❌ Timed out waiting for Tamil unbind verification code")
@@ -278,16 +279,16 @@ def unbind(email: str, token: str, otp: str):
 # area anda tidak bla bla isVpn: 1
 # akun anda telah di blokir, string device id di blacklist.
 if __name__ == "__main__":
-    token = "eyJ0eXAiOiJKV1QiLCAiYWxnIjoiU0hBMjU2In0.eyJpc3MiOiIiLCJpYXQiOjE3OTE0MzgzMjEsImV4cCI6MTc5MjA0MzEyMSwidXNlcl9pZCI6MTA2Nzg0MTMsInRvdXJpc3RfdXJpIjoiIn0.a0bd1741f0c7d2ef1ac9c6775a1a6db45c1928514e27f2c4171e18ef5a0f45a1"
+    token = "eyJ0eXAiOiJKV1QiLCAiYWxnIjoiU0hBMjU2In0.eyJpc3MiOiIiLCJpYXQiOjE3OTE0NDQxNDgsImV4cCI6MTc5MjA0ODk0OCwidXNlcl9pZCI6MTA2Nzg2ODEsInRvdXJpc3RfdXJpIjoiIn0.2fa8e47b75bdf81ff0f2de54536599dde86d8bee352ffc9dc2f9ebc16c5da9d5"
 
     user_id = _extract_userid_from_jwt(token)
     email = (
-        f"{user_id}@jamet.space"
+        f"{user_id}@{EMAIL_DOMAIN}"
         if user_id
-        else f"{random.randint(100000, 900000)}@jamet.space"
+        else f"{random.randint(100000, 900000)}@{EMAIL_DOMAIN}"
     )
 
-    a = 1
+    a = 0
     if a:
         # ini_set_password(token)
         binding(email, token, otp_code="")

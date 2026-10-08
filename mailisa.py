@@ -9,6 +9,10 @@ import os
 
 MAIL_URL = "https://l.koncek.com/"
 STATE_FILE = "tamil_last_seen.json"
+EMAIL_DOMAIN = os.environ.get("TAMIL_EMAIL_DOMAIN", "ini.wtf").strip().lstrip("@")
+
+if not EMAIL_DOMAIN or "@" in EMAIL_DOMAIN:
+    raise ValueError("TAMIL_EMAIL_DOMAIN must be a valid domain name")
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -47,20 +51,21 @@ def parse_email_from_raw(raw_base64: str):
     raw_bytes = base64.b64decode(raw_base64)
     msg = email.message_from_bytes(raw_bytes, policy=policy.default)
 
-    body = ""
+    bodies = []
     if msg.is_multipart():
         for part in msg.walk():
             ctype = part.get_content_type()
             if ctype == "text/plain":
-                return part.get_content()
-            elif ctype == "text/html" and not body:
-                body = strip_html_tags(part.get_content())
+                bodies.append(part.get_content())
+            elif ctype == "text/html":
+                bodies.append(strip_html_tags(part.get_content()))
     else:
         body = msg.get_content()
         if body and body.strip().startswith("<"):
             body = strip_html_tags(body)
+        bodies.append(body)
 
-    return body
+    return "\n".join(body for body in bodies if body)
 
 def wait_for_new_otp_for_target(target_receiver,
                                 timeout=30,
@@ -82,11 +87,14 @@ def wait_for_new_otp_for_target(target_receiver,
             r.raise_for_status()
             data = r.json()
 
-            if "error" in data or "message" in data:
+            if not isinstance(data, dict):
+                raise ValueError("Mail endpoint response is not a JSON object")
+
+            raw = data.get("raw")
+            if not raw:
                 print("⏳ No email yet...")
             else:
                 sender = data.get("from")
-                raw = data.get("raw")
                 body = parse_email_from_raw(raw) if raw else ""
 
                 print("✉️ From:", sender)
