@@ -89,6 +89,15 @@ cargo run --release --manifest-path tamil/Cargo.toml -- --accounts accounts.txt
 
 The scanner uses the selected account's JWT; websocket workers use each account's `ws_token`. Worker count, group size, scan interval, shift limits, and claim burst are configurable; run with `--help` for options.
 
+Run the Rust equivalent of the Dazz local LuckyBag room deployment:
+
+```bash
+cargo run --release --manifest-path tamil/Cargo.toml -- \
+  --accounts accounts.txt --local-luckybag --max-workers 24
+```
+
+This mode scans all hot-anchor rooms (not only rooms marked as currently having a LuckyBag), assigns one account per room, and refreshes assignments every 20 minutes. Configure the cycle with `--local-refresh-secs`; claim bursts default to 7 attempts at 500 ms intervals and can be changed with `--local-claim-attempts` and `--local-claim-delay-ms`. The selected scan account is controlled by `--scan-account-index`.
+
 ## Account helper
 
 ```bash

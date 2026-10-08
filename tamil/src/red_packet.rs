@@ -21,8 +21,11 @@ const WS_URL: &str = "ws://47.84.51.23:9001";
 const API_SIGNING_SECRET: &str = "5d206b343f87f2ca3a0aa05c58b9a64d";
 const WS_SIGNING_SECRET: &str = "uwkeovuoqnpn@13vxck9tjghazhhbrmy";
 const APP_VERSION: &str = "2.1.5";
-const CYAN: &str = "\x1b[38;5;45m";
-const GOLD: &str = "\x1b[38;5;220m";
+const RED: &str = "\x1b[31m";
+const GREEN: &str = "\x1b[32m";
+const YELLOW: &str = "\x1b[33m";
+const CYAN: &str = "\x1b[36m";
+const GRAY: &str = "\x1b[90m";
 const RESET: &str = "\x1b[0m";
 
 fn log(logging: bool, category: &str, message: impl AsRef<str>) {
@@ -33,17 +36,35 @@ fn log(logging: bool, category: &str, message: impl AsRef<str>) {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or_default();
-    println!("[{timestamp}][{category}] {}", message.as_ref());
+    let (icon, color) = match category {
+        "error" => ("❌", RED),
+        "warning" => ("⚠️", YELLOW),
+        "win" => ("💎", GREEN),
+        "bag" => ("💰", GREEN),
+        "claim" => ("🎯", YELLOW),
+        "shutdown" => ("🛑", RED),
+        "dispatch" | "worker" => ("🦈", CYAN),
+        "scan" | "api" => ("📡", CYAN),
+        "websocket" | "join-debug" => ("⚓", CYAN),
+        "local" => ("🦜", YELLOW),
+        _ => ("🏴‍☠️", CYAN),
+    };
+    println!(
+        "\x1b[2K{icon} {GRAY}[{timestamp}][{category}]{RESET} {color}{}{RESET}",
+        message.as_ref()
+    );
 }
 
 fn print_banner(logging: bool) {
     if !logging {
         return;
     }
-    println!(
-        "{CYAN}  +----------------------------------------------------------+\n  |  T A M I L   //   R E D   P A C K E T                   |\n  |                                                          |\n  |    LIVE ROOM SCAN  ::  PRIORITY DISPATCH  ::  CLAIM      |\n  +----------------------------------------------------------+{RESET}"
-    );
-    println!("{GOLD}  Tamil LuckyBag Rust worker v{APP_VERSION}{RESET}\n");
+    print!("\x1b[2J\x1b[1;1H");
+    println!("{CYAN}╔══════════════════════════════════════════════════════╗{RESET}");
+    println!("{CYAN}║          🏴‍☠️  THE FLYING DUTCHMAN  🏴‍☠️              ║{RESET}");
+    println!("{CYAN}║            ⚓  TAMIL LUCKYBAG CREW  ⚓                ║{RESET}");
+    println!("{CYAN}╚══════════════════════════════════════════════════════╝{RESET}");
+    println!("{GREEN}🦜 Tamil LuckyBag Rust worker v{APP_VERSION}{RESET}\n");
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
@@ -101,6 +122,22 @@ struct Args {
 
     #[arg(long, action = clap::ArgAction::SetTrue)]
     scan_only: bool,
+
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        help = "Assign accounts to hot-anchor rooms and refresh assignments periodically"
+    )]
+    local_luckybag: bool,
+
+    #[arg(long, default_value_t = 1_200)]
+    local_refresh_secs: u64,
+
+    #[arg(long, default_value_t = 7)]
+    local_claim_attempts: usize,
+
+    #[arg(long, default_value_t = 500)]
+    local_claim_delay_ms: u64,
 
     #[arg(
         long,
@@ -264,7 +301,7 @@ fn has_lucky_bag_logo(value: &Value) -> bool {
     value.as_i64() == Some(1) || value.as_str() == Some("1")
 }
 
-fn parse_bag_rooms(body: &Value) -> Vec<BagRoom> {
+fn parse_anchor_rooms(body: &Value, lucky_bags_only: bool) -> Vec<BagRoom> {
     let Some(items) = body.get("data").and_then(Value::as_array) else {
         return Vec::new();
     };
@@ -272,7 +309,7 @@ fn parse_bag_rooms(body: &Value) -> Vec<BagRoom> {
     items
         .iter()
         .filter_map(|item| {
-            if !has_lucky_bag_logo(&item["red_packet_logo"]) {
+            if lucky_bags_only && !has_lucky_bag_logo(&item["red_packet_logo"]) {
                 return None;
             }
             let room_id = value_u64(&item["room_id"])?;
@@ -291,6 +328,10 @@ fn parse_bag_rooms(body: &Value) -> Vec<BagRoom> {
         .collect()
 }
 
+fn parse_bag_rooms(body: &Value) -> Vec<BagRoom> {
+    parse_anchor_rooms(body, true)
+}
+
 fn parse_last_page(body: &Value) -> u64 {
     value_u64(&body["last_page"]).unwrap_or(1).max(1)
 }
@@ -306,6 +347,25 @@ async fn fetch_hot_page(
     page: u64,
     logging: bool,
 ) -> Result<(Vec<BagRoom>, u64)> {
+    let (data, last_page) = request_hot_page(client, account, page, logging).await?;
+    let rooms = parse_bag_rooms(&data);
+    log(
+        logging,
+        "api",
+        format!(
+            "page {page} returned {} LuckyBag-marked room(s); API last_page={last_page}",
+            rooms.len()
+        ),
+    );
+    Ok((rooms, last_page))
+}
+
+async fn request_hot_page(
+    client: &reqwest::Client,
+    account: &Account,
+    page: u64,
+    logging: bool,
+) -> Result<(Value, u64)> {
     log(
         logging,
         "api",
@@ -360,18 +420,9 @@ async fn fetch_hot_page(
         ));
     }
 
-    let data = &body["data"];
-    let rooms = parse_bag_rooms(data);
-    let last_page = parse_last_page(data);
-    log(
-        logging,
-        "api",
-        format!(
-            "page {page} returned {} LuckyBag-marked room(s); API last_page={last_page}",
-            rooms.len()
-        ),
-    );
-    Ok((rooms, last_page))
+    let data = body["data"].clone();
+    let last_page = parse_last_page(&data);
+    Ok((data, last_page))
 }
 
 async fn scan_lucky_bag_rooms(
@@ -428,6 +479,56 @@ async fn scan_lucky_bag_rooms(
         "scan",
         format!(
             "scan complete: {} unique LuckyBag-marked room(s) across pages 1-{final_page}",
+            rooms.len()
+        ),
+    );
+    Ok(rooms)
+}
+
+async fn scan_hot_anchor_rooms(
+    client: &reqwest::Client,
+    account: &Account,
+    max_pages: u64,
+    concurrency: usize,
+    logging: bool,
+) -> Result<Vec<BagRoom>> {
+    log(
+        logging,
+        "scan",
+        format!("starting hot-anchor scan; max_pages={max_pages}, concurrency={concurrency}"),
+    );
+    let (first_page, last_page) = request_hot_page(client, account, 1, logging).await?;
+    let mut rooms = parse_anchor_rooms(&first_page, false);
+    let final_page = min(last_page, max_pages.max(1));
+    if last_page > final_page {
+        log(
+            logging,
+            "warning",
+            format!("API has {last_page} pages; configured cap limits this scan to {final_page}"),
+        );
+    }
+
+    let mut pages = stream::iter(2..=final_page)
+        .map(|page| async move { request_hot_page(client, account, page, logging).await })
+        .buffer_unordered(concurrency.max(1));
+    while let Some(page_result) = pages.next().await {
+        match page_result {
+            Ok((data, _)) => rooms.extend(parse_anchor_rooms(&data, false)),
+            Err(error) => log(
+                logging,
+                "error",
+                format!("hot-anchor scan page failed: {error:#}"),
+            ),
+        }
+    }
+
+    let mut seen = HashSet::new();
+    rooms.retain(|room| seen.insert(room.room_id));
+    log(
+        logging,
+        "scan",
+        format!(
+            "scan complete: {} unique hot-anchor room(s) across pages 1-{final_page}",
             rooms.len()
         ),
     );
@@ -660,8 +761,13 @@ async fn run_worker(room: BagRoom, account: Account, config: WorkerConfig, stop:
 
                                     if op == 2101 {
                                         let code = body["Code"].to_string();
-                                        log(config.logging, "claim", format!("user {} room {} result code={} gold={}", account.user_id, room.room_id, code, body["Gold"]));
                                         let result_code = body["Code"].as_i64().or_else(|| body["Code"].as_str()?.parse::<i64>().ok());
+                                        let result_category = match result_code {
+                                            Some(0) => "win",
+                                            Some(1014) => "warning",
+                                            _ => "error",
+                                        };
+                                        log(config.logging, result_category, format!("user {} room {} result code={} gold={}", account.user_id, room.room_id, code, body["Gold"]));
                                         if matches!(result_code, Some(0 | 1014)) {
                                             if let Some(bag_id) = value_u64(&body["ID"]) {
                                                 if let Some((signal, _)) = claim_signals.remove(&bag_id) {
@@ -994,6 +1100,148 @@ async fn debug_join_room(room_id: u64, account: &Account, logging: bool) -> Resu
     }
 }
 
+async fn run_local_luckybag(
+    client: &reqwest::Client,
+    accounts: &[Account],
+    scan_account: &Account,
+    args: &Args,
+    logging: bool,
+) -> Result<()> {
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let signal_shutdown = shutdown.clone();
+    tokio::spawn(async move {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            log(
+                true,
+                "error",
+                format!("failed to listen for Ctrl-C: {error}"),
+            );
+        } else {
+            log(true, "shutdown", "shutdown requested");
+            signal_shutdown.store(true, Ordering::Relaxed);
+        }
+    });
+
+    let refresh = Duration::from_secs(args.local_refresh_secs);
+    let worker_config = WorkerConfig {
+        idle_timeout: refresh,
+        max_shift: refresh,
+        claim_attempts: args.local_claim_attempts,
+        claim_delay: Duration::from_millis(args.local_claim_delay_ms),
+        logging,
+    };
+    let mut cycle = 0_u64;
+
+    while !shutdown.load(Ordering::Relaxed) {
+        cycle += 1;
+        log(
+            logging,
+            "local",
+            format!("starting room assignment cycle {cycle}"),
+        );
+        let rooms = match scan_hot_anchor_rooms(
+            client,
+            scan_account,
+            args.max_pages,
+            args.scan_concurrency,
+            logging,
+        )
+        .await
+        {
+            Ok(rooms) => rooms,
+            Err(error) => {
+                log(
+                    logging,
+                    "error",
+                    format!("local hot-anchor scan failed: {error:#}"),
+                );
+                tokio::select! {
+                    _ = tokio::time::sleep(refresh) => {},
+                    _ = async {
+                        while !shutdown.load(Ordering::Relaxed) {
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                    } => {},
+                }
+                continue;
+            }
+        };
+
+        if rooms.is_empty() {
+            log(logging, "warning", "hot-anchor scan returned no rooms");
+        }
+        let assignments = accounts
+            .iter()
+            .take(args.max_workers)
+            .zip(rooms.iter())
+            .collect::<Vec<_>>();
+        log(
+            logging,
+            "local",
+            format!(
+                "assigning {} account(s) to distinct room(s); {} account(s) and {} room(s) remain unused",
+                assignments.len(),
+                accounts.len().saturating_sub(assignments.len()),
+                rooms.len().saturating_sub(assignments.len())
+            ),
+        );
+
+        if assignments.is_empty() {
+            tokio::select! {
+                _ = tokio::time::sleep(refresh) => {},
+                _ = async {
+                    while !shutdown.load(Ordering::Relaxed) {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                } => {},
+            }
+            continue;
+        }
+
+        let cycle_stop = Arc::new(AtomicBool::new(false));
+        let mut workers = JoinSet::new();
+        for (account, room) in assignments {
+            log(
+                logging,
+                "dispatch",
+                format!(
+                    "assigning user {} to room {} ({})",
+                    account.user_id, room.room_id, room.nickname
+                ),
+            );
+            let account = account.clone();
+            let room = room.clone();
+            let config = worker_config.clone();
+            let stop = cycle_stop.clone();
+            workers.spawn(async move {
+                run_worker(room, account, config, stop).await;
+            });
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(refresh) => {
+                log(logging, "local", format!("cycle {cycle} refresh interval elapsed"));
+            },
+            _ = async {
+                while !shutdown.load(Ordering::Relaxed) {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            } => {},
+        }
+        cycle_stop.store(true, Ordering::Relaxed);
+        while let Some(result) = workers.join_next().await {
+            if let Err(error) = result {
+                log(
+                    logging,
+                    "error",
+                    format!("local room worker failed: {error}"),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -1005,6 +1253,14 @@ async fn main() -> Result<()> {
     }
     if args.claim_attempts == 0 {
         return Err(anyhow!("claim-attempts must be positive"));
+    }
+    if args.local_refresh_secs == 0
+        || args.local_claim_attempts == 0
+        || args.local_claim_delay_ms == 0
+    {
+        return Err(anyhow!(
+            "local refresh interval, claim attempts, and claim delay must be positive"
+        ));
     }
 
     let logging = args.logging == LoggingMode::On;
@@ -1065,6 +1321,10 @@ async fn main() -> Result<()> {
 
     if args.scan_only {
         return scan_only(&client, &scan_account, &args, logging).await;
+    }
+
+    if args.local_luckybag {
+        return run_local_luckybag(&client, &loaded, &scan_account, &args, logging).await;
     }
 
     let accounts = Arc::new(Mutex::new(VecDeque::from(loaded)));
@@ -1219,6 +1479,18 @@ mod tests {
         assert_eq!(rooms.len(), 2);
         assert_eq!(rooms[0].room_id, 42);
         assert_eq!(rooms[0].anchor_id, 7);
+    }
+
+    #[test]
+    fn hot_anchor_parser_includes_rooms_without_lucky_bags() {
+        let data = json!({"data":[
+            {"room_id":"42","user_id":7,"nickname":"anchor","red_packet_logo":"1"},
+            {"room_id":43,"user_id":8,"nickname":"live room","red_packet_logo":0}
+        ]});
+        let rooms = parse_anchor_rooms(&data, false);
+        assert_eq!(rooms.len(), 2);
+        assert_eq!(rooms[1].room_id, 43);
+        assert!(parse_bag_rooms(&data).iter().all(|room| room.room_id == 42));
     }
 
     #[test]
