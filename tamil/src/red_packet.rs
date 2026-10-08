@@ -93,7 +93,11 @@ struct Args {
     #[arg(long, default_value_t = 24)]
     max_workers: usize,
 
-    #[arg(long, default_value_t = 3)]
+    #[arg(
+        long,
+        default_value_t = 3,
+        help = "Maximum accounts assigned per room, including in --local-luckybag mode"
+    )]
     workers_per_room: usize,
 
     #[arg(long, default_value_t = 2_000)]
@@ -1013,6 +1017,17 @@ async fn scan_only(
     Ok(())
 }
 
+fn local_room_assignment_count(
+    account_count: usize,
+    room_count: usize,
+    workers_per_room: usize,
+) -> usize {
+    if account_count == 0 || room_count == 0 || workers_per_room == 0 {
+        return 0;
+    }
+    account_count.div_ceil(workers_per_room).min(room_count)
+}
+
 async fn debug_join_room(room_id: u64, account: &Account, logging: bool) -> Result<()> {
     log(
         logging,
@@ -1170,23 +1185,23 @@ async fn run_local_luckybag(
         if rooms.is_empty() {
             log(logging, "warning", "hot-anchor scan returned no rooms");
         }
-        let assignments = accounts
-            .iter()
-            .take(args.max_workers)
-            .zip(rooms.iter())
-            .collect::<Vec<_>>();
+        let assigned_account_count = accounts.len().min(args.max_workers);
+        let room_assignment_count =
+            local_room_assignment_count(assigned_account_count, rooms.len(), args.workers_per_room);
         log(
             logging,
             "local",
             format!(
-                "assigning {} account(s) to distinct room(s); {} account(s) and {} room(s) remain unused",
-                assignments.len(),
-                accounts.len().saturating_sub(assignments.len()),
-                rooms.len().saturating_sub(assignments.len())
+                "assigning up to {} account(s) across {} room(s), with up to {} worker(s) per room; {} account(s) and {} room(s) remain unused",
+                assigned_account_count,
+                room_assignment_count,
+                args.workers_per_room,
+                accounts.len().saturating_sub(assigned_account_count),
+                rooms.len().saturating_sub(room_assignment_count)
             ),
         );
 
-        if assignments.is_empty() {
+        if room_assignment_count == 0 {
             tokio::select! {
                 _ = tokio::time::sleep(refresh) => {},
                 _ = async {
@@ -1199,23 +1214,34 @@ async fn run_local_luckybag(
         }
 
         let cycle_stop = Arc::new(AtomicBool::new(false));
+        let account_queue = Arc::new(Mutex::new(VecDeque::from(
+            accounts
+                .iter()
+                .take(assigned_account_count)
+                .cloned()
+                .collect::<Vec<_>>(),
+        )));
+        let active_rooms = Arc::new(Mutex::new(HashSet::new()));
+        let worker_semaphore = Arc::new(Semaphore::new(args.max_workers));
         let mut workers = JoinSet::new();
-        for (account, room) in assignments {
+        for room in rooms.into_iter().take(room_assignment_count) {
             log(
                 logging,
                 "dispatch",
                 format!(
-                    "assigning user {} to room {} ({})",
-                    account.user_id, room.room_id, room.nickname
+                    "assigning room {} ({}) up to {} worker(s)",
+                    room.room_id, room.nickname, args.workers_per_room
                 ),
             );
-            let account = account.clone();
-            let room = room.clone();
-            let config = worker_config.clone();
-            let stop = cycle_stop.clone();
-            workers.spawn(async move {
-                run_worker(room, account, config, stop).await;
-            });
+            workers.spawn(run_room_group(
+                room,
+                account_queue.clone(),
+                active_rooms.clone(),
+                worker_semaphore.clone(),
+                worker_config.clone(),
+                args.workers_per_room,
+                cycle_stop.clone(),
+            ));
         }
 
         tokio::select! {
@@ -1491,6 +1517,14 @@ mod tests {
         assert_eq!(rooms.len(), 2);
         assert_eq!(rooms[1].room_id, 43);
         assert!(parse_bag_rooms(&data).iter().all(|room| room.room_id == 42));
+    }
+
+    #[test]
+    fn local_mode_groups_accounts_by_workers_per_room() {
+        assert_eq!(local_room_assignment_count(24, 10, 3), 8);
+        assert_eq!(local_room_assignment_count(4, 10, 3), 2);
+        assert_eq!(local_room_assignment_count(4, 1, 3), 1);
+        assert_eq!(local_room_assignment_count(0, 10, 3), 0);
     }
 
     #[test]
