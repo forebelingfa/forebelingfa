@@ -125,6 +125,66 @@ def login_tamil(user_id: str | int, password: str, timeout: float = DEFAULT_TIME
     return _post("simple/login", payload, timeout=timeout)
 
 
+def create_tourist_account(timeout: float = DEFAULT_TIMEOUT) -> Dict[str, Any]:
+    """Request a tourist account with API and WebSocket tokens."""
+    endpoint = "go_v3/limoo/tourist/token"
+    payload = {
+        "code_type": 0,
+        "isVpn": "0",
+        "network": "Organic",
+        "type": 0,
+        "userCountry": "",
+        "app_version": "1.2.0",
+        "channel_id": "3",
+        "device_id": uuid.uuid4().hex,
+        "facility": "1",
+        "lang": "id",
+        "package_type": "Android-Google",
+        "sign": "",
+        "time": str(int(time.time())),
+        "tourist_uri": "",
+        "user_id": "0",
+    }
+    payload["sign"] = generate_sign_from_payload(payload)
+    headers = _headers()
+    headers["User-Agent"] = "2.1.1"
+
+    try:
+        response = session.post(
+            f"{API_BASE}/{endpoint}",
+            json=payload,
+            headers=headers,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except requests.RequestException as exc:
+        raise TamilAPIError(f"{endpoint}: request failed: {exc}") from exc
+    except ValueError as exc:
+        raise TamilAPIError(f"{endpoint}: server returned invalid JSON") from exc
+
+    if not isinstance(result, dict):
+        raise TamilAPIError(f"{endpoint}: response was not a JSON object")
+    data = _require_success(result, endpoint).get("data")
+    if not isinstance(data, dict):
+        raise TamilAPIError(f"{endpoint}: response did not contain tourist account data")
+
+    jwt_token = data.get("jwt_token")
+    token = data.get("token")
+    try:
+        tourist_id = int(data.get("tourist_id"))
+    except (TypeError, ValueError) as exc:
+        raise TamilAPIError(f"{endpoint}: response did not contain a valid tourist_id") from exc
+    if not isinstance(jwt_token, str) or not jwt_token:
+        raise TamilAPIError(f"{endpoint}: response did not contain a JWT")
+    if not isinstance(token, str) or not token:
+        raise TamilAPIError(f"{endpoint}: response did not contain a WebSocket token")
+    if tourist_id <= 0:
+        raise TamilAPIError(f"{endpoint}: response tourist_id must be positive")
+
+    return {**data, "jwt_token": jwt_token, "token": token, "tourist_id": tourist_id}
+
+
 def get_user_info(
     user_id: str | int,
     jwt_token: str,
