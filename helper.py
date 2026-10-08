@@ -13,11 +13,18 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import random
 import tempfile
 import time
 from typing import Any, Dict, List, Optional
 
-from api import TamilAPIError, generate_sign_from_payload, get_user_info, login_tamil
+from api import (
+    TamilAPIError,
+    clone_user_profile,
+    generate_sign_from_payload,
+    get_user_info,
+    login_tamil,
+)
 from simple_account_manager import load_accounts
 
 
@@ -448,6 +455,61 @@ def generate_accounts_file_from_tamil(
     return len(account_lines)
 
 
+def mass_clone_profiles(
+    accounts_file: str | Path,
+    source_user_ids_file: str | Path,
+) -> List[Dict[str, Any]]:
+    """Clone one randomly selected source profile onto each account in a token file."""
+    source_path = Path(source_user_ids_file)
+    source_user_ids = []
+    for line_number, raw_line in enumerate(
+        source_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        value = raw_line.strip()
+        if not value or value.startswith("#"):
+            continue
+        try:
+            user_id = int(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid source user ID in {source_path} at line {line_number}"
+            ) from exc
+        if user_id <= 0:
+            raise ValueError(
+                f"Source user ID must be positive in {source_path} at line {line_number}"
+            )
+        source_user_ids.append(user_id)
+
+    if not source_user_ids:
+        raise ValueError(f"No source user IDs found in {source_path}")
+
+    target_accounts = load_accounts(accounts_file)
+    results: List[Dict[str, Any]] = []
+    for account in target_accounts:
+        target_user_id = int(account["user_id"])
+        source_user_id = random.choice(source_user_ids)
+        if source_user_id == target_user_id:
+            results.append({
+                "source_user_id": source_user_id,
+                "target_user_id": target_user_id,
+                "status": "skipped: source and target are the same account",
+            })
+            continue
+
+        statuses = clone_user_profile(
+            source_user_id,
+            target_user_id,
+            account["jwt"],
+        )
+        results.append({
+            "source_user_id": source_user_id,
+            "target_user_id": target_user_id,
+            "status": statuses,
+        })
+
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tamil account helper utilities")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -465,6 +527,13 @@ def main() -> None:
     )
     tamil_parser.add_argument("tamil_file", nargs="?", default="tamil.txt")
     tamil_parser.add_argument("--output", default="accounts.txt")
+
+    clone_parser = commands.add_parser(
+        "clone-profiles",
+        help="Clone random source profiles onto accounts listed in an account token file",
+    )
+    clone_parser.add_argument("accounts", help="Target accounts: user_id,ws_token,jwt rows")
+    clone_parser.add_argument("source_user_ids", help="Text file with one source user ID per line")
 
     status_parser = commands.add_parser("inspect-accounts", help="Inspect JWT claims and profile lookup separately")
     status_parser.add_argument("accounts")
@@ -508,6 +577,11 @@ def main() -> None:
     elif args.command == "generate-from-tamil":
         count = generate_accounts_file_from_tamil(args.tamil_file, args.output)
         print(f"Wrote credentials for {count} accounts to {args.output}")
+    elif args.command == "clone-profiles":
+        results = mass_clone_profiles(args.accounts, args.source_user_ids)
+        for result in results:
+            print(json.dumps(result, ensure_ascii=False))
+        print(f"Processed {len(results)} target accounts")
     elif args.command == "inspect-accounts":
         inspect_account_file_concurrent(
             args.accounts,

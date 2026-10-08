@@ -7,9 +7,9 @@ from email import policy
 import json
 import os
 
-MAIL_URL = "https://l.koncek.com/"
+MAIL_URL = "https://mail.taalmil.space/"
 STATE_FILE = "tamil_last_seen.json"
-EMAIL_DOMAIN = os.environ.get("TAMIL_EMAIL_DOMAIN", "ini.wtf").strip().lstrip("@")
+EMAIL_DOMAIN = os.environ.get("TAMIL_EMAIL_DOMAIN", "taalmil.space").strip().lstrip("@")
 
 if not EMAIL_DOMAIN or "@" in EMAIL_DOMAIN:
     raise ValueError("TAMIL_EMAIL_DOMAIN must be a valid domain name")

@@ -241,7 +241,7 @@ def binding(email: str, token: str, otp_code: str):
 
 def ini_set_password(token: str):
     DEVICE_ID = str(uuid.uuid4()).replace("-","")
-    PASSWORD = DEVICE_ID[17:]
+    PASSWORD = "hellofool31" #DEVICE_ID[17:]
     print(">>> Setting password...")
     status, resp = set_password(token=token, device_id=DEVICE_ID, password=PASSWORD)
     print(status, resp)
@@ -279,7 +279,7 @@ def unbind(email: str, token: str, otp: str):
 # area anda tidak bla bla isVpn: 1
 # akun anda telah di blokir, string device id di blacklist.
 if __name__ == "__main__":
-    token = "eyJ0eXAiOiJKV1QiLCAiYWxnIjoiU0hBMjU2In0.eyJpc3MiOiIiLCJpYXQiOjE3OTE0NDQxNDgsImV4cCI6MTc5MjA0ODk0OCwidXNlcl9pZCI6MTA2Nzg2ODEsInRvdXJpc3RfdXJpIjoiIn0.2fa8e47b75bdf81ff0f2de54536599dde86d8bee352ffc9dc2f9ebc16c5da9d5"
+    token = "eyJ0eXAiOiJKV1QiLCAiYWxnIjoiU0hBMjU2In0.eyJpc3MiOiIiLCJpYXQiOjE3OTE0NTUyOTksImV4cCI6MTc5MjA2MDA5OSwidXNlcl9pZCI6MTA2ODAxMTAsInRvdXJpc3RfdXJpIjoiIn0.e3e327bb9a4f0b83f70c912a2e89d402631c10a4807fa97214c0ea25ffe76ce9"
 
     user_id = _extract_userid_from_jwt(token)
     email = (
@@ -288,10 +288,10 @@ if __name__ == "__main__":
         else f"{random.randint(100000, 900000)}@{EMAIL_DOMAIN}"
     )
 
-    a = 0
+    a = 1
     if a:
         # ini_set_password(token)
-        binding(email, token, otp_code="")
+        # binding(email, token, otp_code="")
         if ini_set_password(token):
             print("Email:", email)
             unbind(email, token, otp="")

@@ -146,6 +146,7 @@ def drain_consents(d, max_iters=8, delay=0.6):
 
     actions = 0
     scrolls = 0
+    idle_since = time.monotonic()
     for _ in range(max_iters):
         consent_button = None
         for selector in consent_buttons:
@@ -157,14 +158,25 @@ def drain_consents(d, max_iters=8, delay=0.6):
         if consent_button is not None:
             consent_button.click()
             actions += 1
-            time.sleep(delay)
+            deadline = time.monotonic() + 15
+            while consent_button.exists(timeout=0.2):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "Google consent button remained visible after it was "
+                        "clicked; refusing to click it repeatedly"
+                    )
+                time.sleep(delay)
+            idle_since = time.monotonic()
             continue
 
         managed_account_disclosure = d(textContains="Google Workspace").exists(
             timeout=0.2
         )
         if managed_account_disclosure and scrolls < 4:
-            scroll_arrow = d(description="Scroll ke bawah")
+            scroll_arrow = d(
+                text="Scroll ke bawah",
+                packageName="com.google.android.gms",
+            )
             if scroll_arrow.exists(timeout=0.2):
                 scroll_arrow.click()
             else:
@@ -172,14 +184,28 @@ def drain_consents(d, max_iters=8, delay=0.6):
             actions += 1
             scrolls += 1
             time.sleep(delay)
+            idle_since = time.monotonic()
             continue
 
         if not managed_account_disclosure:
+            if (
+                d.app_current().get("package") == "com.google.android.gms"
+                and time.monotonic() - idle_since < 15
+            ):
+                time.sleep(delay)
+                continue
             break
         raise RuntimeError(
             "Google Workspace disclosure is still visible, but its continue "
             "button did not appear after scrolling"
         )
+    else:
+        if any(d(**selector).exists(timeout=0.2) for selector in consent_buttons) or d(
+            textContains="Google Workspace"
+        ).exists(timeout=0.2):
+            raise RuntimeError(
+                "Google consent flow exceeded its action limit before completing"
+            )
     return actions
 
 
@@ -630,7 +656,7 @@ if __name__ == "__main__":
     login_google_account = 1
     # Define a maximum number of retries to prevent infinite loops
     MAX_VERIFICATION_RETRIES = 6
-    sf7=3
+    sf7=4
     for mail_num_idx in range(56):
         
 
