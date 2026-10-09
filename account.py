@@ -664,7 +664,7 @@ if __name__ == "__main__":
     login_google_account = 1
     # Define a maximum number of retries to prevent infinite loops
     MAX_VERIFICATION_RETRIES = 6
-    sf7=20
+    sf7=30
     for mail_num_idx in range(56):
         
 
