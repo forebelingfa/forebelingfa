@@ -5,7 +5,8 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 const DOMAINS: &[&str] = &[
-    "gosmail.xyz"
+    // "gumoy.site",
+    "ksihperaktis.my.id"
 ];
 
 #[tokio::main]
@@ -22,68 +23,76 @@ async fn main() {
     let mut handles = Vec::new();
 
     for &domain in DOMAINS.iter() {
-        println!("Bruteforce pattern: <aaa..zzz>1@<{}>  workers={}", domain, max_workers);
+        println!("Checking pattern: <aaaa..zzzz>1@<{}>  workers={}", domain, max_workers);
+
         for c1 in b'a'..=b'z' {
             for c2 in b'a'..=b'z' {
                 for c3 in b'a'..=b'z' {
-                    let prefix = format!("{}{}{}1", c1 as char, c2 as char, c3 as char);
-                    let email = format!("{}@{}", prefix, domain);
+                    for c4 in b'a'..=b'z' {
+                        let prefix = format!(
+                            "{}{}{}{}1",
+                            c1 as char,
+                            c2 as char,
+                            c3 as char,
+                            c4 as char
+                        );
+                        let email = format!("{}@{}", prefix, domain);
+                        // println!("{}", email);
 
-                    // println!("checking email: {}", email);
-            let sem = sem.clone();
-            let out_lock = out_lock.clone();
+                        let sem = sem.clone();
+                        let out_lock = out_lock.clone();
 
-            let handle = tokio::spawn(async move {
-                // limit concurrency
-                let _permit = sem.acquire_owned().await.expect("semaphore closed");
+                        let handle = tokio::spawn(async move {
+                            let _permit = sem.acquire_owned().await.expect("semaphore closed");
 
-                let input = CheckEmailInput::new(email.clone());
-                let result = check_email(&input).await;
+                            let input = CheckEmailInput::new(email.clone());
+                            let result = check_email(&input).await;
 
-                // inspect smtp.is_deliverable
-                if let Ok(val) = serde_json::to_value(&result) {
-                    let is_deliverable = val
-                        .get("smtp")
-                        .and_then(Value::as_object)
-                        .and_then(|m| m.get("is_deliverable"))
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
+                            if let Ok(val) = serde_json::to_value(&result) {
+                                let is_deliverable = val
+                                    .get("smtp")
+                                    .and_then(Value::as_object)
+                                    .and_then(|m| m.get("is_deliverable"))
+                                    .and_then(Value::as_bool)
+                                    .unwrap_or(false);
 
-                        if is_deliverable {
-                            println!("FOUND ON: {}", email);
-                            // append prefix to single found.txt, one per line
-                            let guard = out_lock.lock().await;
-                            let mut f = match fs::OpenOptions::new().create(true).append(true).open("found.txt").await {
-                                Ok(f) => f,
-                                Err(e) => {
-                                    eprintln!("Failed to open found.txt: {}", e);
-                                    return;
+                                if is_deliverable {
+                                    println!("FOUND ON: {}", email);
+                                    let guard = out_lock.lock().await;
+                                    let mut f = match fs::OpenOptions::new()
+                                        .create(true)
+                                        .append(true)
+                                        .open("found.txt")
+                                        .await
+                                    {
+                                        Ok(f) => f,
+                                        Err(e) => {
+                                            eprintln!("Failed to open found.txt: {}", e);
+                                            return;
+                                        }
+                                    };
+
+                                    if let Err(e) = f.write_all(format!("{}\n", email).as_bytes()).await {
+                                        eprintln!("Failed to write to found.txt: {}", e);
+                                    }
+
+                                    drop(guard);
                                 }
-                            };
-                            if let Err(e) = f.write_all(format!("{}\n", email).as_bytes()).await {
-                                eprintln!("Failed to write to found.txt: {}", e);
+                            } else {
+                                eprintln!("Failed to serialize result for {}", email);
                             }
-                            // drop guard to release mutex
-                            drop(guard);
-                        } else {
-                            // skipped
-                        }
-                } else {
-                    eprintln!("Failed to serialize result for {}", email);
-                }
-            });
+                        });
 
-                    handles.push(handle);
+                        handles.push(handle);
+                    }
                 }
             }
         }
     }
 
-    // await all tasks
     for h in handles {
         let _ = h.await;
     }
 
     println!("Done.");
 }
-
