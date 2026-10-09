@@ -51,7 +51,9 @@ def check_gold_from_file(
         if result["error"]:
             print(f"[{user_id}] ERROR {result['error']}")
         else:
-            print(f"[{user_id}] {result['nickname']} => gold={result['gold']}")
+            amount = result["gold"] // rounder if transfer else result["gold"]
+            label = "eligible gifts" if transfer else "gold"
+            print(f"[{user_id}] {result['nickname']} => {label}={amount}")
     return results
 
 
@@ -144,9 +146,13 @@ def main() -> None:
     keep_zero_gold = args.keep_zero or not args.keep_rich
     rows = check_gold_from_file(args.accounts, workers=args.workers, timeout=args.timeout, retries=args.retries)
     successful = [row for row in rows if row.get("gold") is not None]
-    total_gold = sum(int(row["gold"]) for row in successful)
+    total_gold = sum(
+        int(row["gold"]) // rounder if transfer else int(row["gold"])
+        for row in successful
+    )
     failed = len(rows) - len(successful)
-    print(f"Total gold across {len(successful)} valid accounts: {total_gold}")
+    total_label = "eligible gifts" if transfer else "gold"
+    print(f"Total {total_label} across {len(successful)} valid accounts: {total_gold}")
     if failed:
         print(f"Failed accounts: {failed}")
 
@@ -160,4 +166,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    transfer = 0
+    rounder  = 10000
     main()
